@@ -81,6 +81,7 @@ public:
 
 	double difficulty_actual;
 	double difficulty_remote;
+	bool difficulty_fixed;		// d= with allow_static_diff: no band/silence vardiff
 	double difficulty_written;
 	double difficulty_prev;		// in effect for jobs up to difficulty_prev_jobid
 	int difficulty_prev_jobid;
@@ -192,6 +193,7 @@ double client_share_difficulty(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen);
 int client_jobid_gen(const char *jobid);
 
 void client_initialize_difficulty(YAAMP_CLIENT *client);
+const char *client_password_param(const char *password, const char *key, size_t keylen);
 bool client_configure(YAAMP_CLIENT *client, json_value *json_params);
 
 //////////////////////////////////////////////////////////////////////////

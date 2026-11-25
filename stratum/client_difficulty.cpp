@@ -139,6 +139,7 @@ void client_adjust_difficulty(YAAMP_CLIENT *client)
 		return;
 	}
 
+	if(client->difficulty_fixed) return;
 	if(client_vardiff_undelivered(client)) return;
 
 	client_speed_update(client);
@@ -206,7 +207,7 @@ bool client_idle(YAAMP_CLIENT *client, int *idle)
 // share silence, from the job thread (job_update) with the client's current job
 void client_vardiff_silence(YAAMP_CLIENT *client, YAAMP_JOB *job)
 {
-	if(client->difficulty_remote) return;
+	if(client->difficulty_remote || client->difficulty_fixed) return;
 	if(client_vardiff_undelivered(client)) return;
 	if(client_vardiff_at_floor(client)) return;	// idle handling (client_idle) takes over
 
@@ -258,12 +259,38 @@ int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 	return 0;
 }
 
-// d=<diff> in the password sets the starting difficulty, vardiff takes over from there
+// value of a comma separated password token "key=value"; exact, so "d" does
+// not match "sd=" or "decred="
+const char *client_password_param(const char *password, const char *key, size_t keylen)
+{
+	if(!password) return NULL;
+
+	const char *p = password;
+	while(*p)
+	{
+		while(*p == ' ' || *p == ',') p++;
+		if(!*p) break;
+		if(!strncmp(p, key, keylen) && p[keylen] == '=')
+			return p + keylen + 1;
+		p = strchr(p, ',');
+		if(!p) break;
+	}
+	return NULL;
+}
+
+// sd=<diff> sets the starting difficulty, vardiff takes over from there.
+// d=<diff> does the same, or fixes the difficulty with allow_static_diff
+// (pool admin's choice: a too low fixed difficulty floods the pool with
+// shares, so the spam trigger still raises it). d= wins over sd=.
 void client_initialize_difficulty(YAAMP_CLIENT *client)
 {
-	char *p = strstr(client->password, "d=");
-	char *p2 = strstr(client->password, "decred=");
-	if(!p || p2) return;
+	if(client_password_param(client->password, "decred", 6)) return;
+
+	bool fixed = false;
+	const char *value = client_password_param(client->password, "d", 1);
+	if(value) fixed = g_stratum_allow_static_diff;
+	else value = client_password_param(client->password, "sd", 2);
+	if(!value) return;
 
 	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
 	{
@@ -271,12 +298,14 @@ void client_initialize_difficulty(YAAMP_CLIENT *client)
 		diff_to_target(client->share_target, client->difficulty_actual);
 	}
 	else {
-		double diff = client_normalize_difficulty(atof(p+2), client);
+		double diff = client_normalize_difficulty(atof(value), client);
 		uint64_t user_target = diff_to_target(diff);
 
 	//	debuglog("%016llx target\n", user_target);
 		if(user_target >= YAAMP_MINDIFF && user_target <= YAAMP_MAXDIFF)
+		{
 			client->difficulty_actual = diff;
+			client->difficulty_fixed = fixed;
+		}
 	}
-
 }

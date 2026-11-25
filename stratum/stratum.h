@@ -101,6 +101,7 @@ extern double g_stratum_spm_spam;
 extern int g_stratum_share_timeout;
 extern int g_stratum_speed_slot_secs;
 extern int g_stratum_idle_timeout;
+extern bool g_stratum_allow_static_diff;
 
 extern double g_stratum_nicehash_difficulty;
 extern double g_stratum_nicehash_min_diff;

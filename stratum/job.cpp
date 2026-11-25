@@ -60,6 +60,7 @@ static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxha
 		double difficulty_remote = client->difficulty_remote;
 		if(remote->difficulty_actual < client->difficulty_actual)
 		{
+			RETURN_ON_CONDITION(client->difficulty_fixed, true);
 			RETURN_ON_CONDITION(remote->difficulty_actual*4 < client->difficulty_actual, true);
 
 			difficulty_remote = remote->difficulty_actual;

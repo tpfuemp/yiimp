@@ -40,6 +40,7 @@ double g_stratum_spm_spam;
 int g_stratum_share_timeout;
 int g_stratum_speed_slot_secs;
 int g_stratum_idle_timeout;
+bool g_stratum_allow_static_diff;
 
 double g_stratum_nicehash_difficulty;
 double g_stratum_nicehash_min_diff;
@@ -371,6 +372,8 @@ int main(int argc, char **argv)
 	g_stratum_speed_slot_secs = std::max(1, speed_window / YAAMP_SPEED_SLOTS);
 	// no valid share for this long at the lowest difficulty (or 3x as long in any case): disconnect
 	g_stratum_idle_timeout = std::max(60, iniparser_getint(ini, "STRATUM:idle_timeout", 600));
+	// d= in the password fixes the difficulty (only spam raises it); off: d= is a start value like sd=
+	g_stratum_allow_static_diff = iniparser_getboolean(ini, "STRATUM:allow_static_diff", false);
 	
 	char *new_log_directory = iniparser_getstring(ini, "STRATUM:logdir", NULL);
 	if (new_log_directory) { strcpy(g_log_directory, new_log_directory); }
