@@ -506,6 +506,9 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 {
 	client->submit_share_diff = -1;
 
+	if (is_ethash || is_etchash)
+		return ethash_submit(client, json_params);
+
 	// simple backport, will need some rework
 	if (is_kawpow || is_firopow || is_phihash || is_meowpow) {
 		return kawpow_submit(client, json_params);

@@ -63,6 +63,11 @@ public:
 
 	bool is_nicehash;
 
+	// ethash: ethproxy login (eth_submitLogin/eth_getWork, no subscribe, target in
+	// the work); NiceHash EthereumStratum/1.0.0 (array subscribe result, no 0x)
+	bool is_ethproxy;
+	bool is_nicehash_ethstratum;
+
 	int userid;
 	int workerid;
 	int coinid;

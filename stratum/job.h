@@ -100,6 +100,12 @@ struct YAAMP_JOB_TEMPLATE
 	uint256 header_hash;
 	uint256 header_seed;
 	//////////////////////////////////////////////////
+
+	// ethash / etchash work from eth_getWork (0x-prefixed big endian hashes)
+	char eth_header[80];
+	char eth_seed[80];
+	char eth_target[80];
+	int eth_epoch;
 };
 
 #define YAAMP_JOB_MAXSUBIDS		200
@@ -170,6 +176,9 @@ void job_send_last(YAAMP_CLIENT *client);
 void job_resend(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen);
 void job_notify_id(char *out, YAAMP_JOB *job, int gen);
 void job_broadcast(YAAMP_JOB *job);
+
+// job for an ethash client, honouring mc=SYMBOL
+YAAMP_JOB *job_get_last_for_ethash(YAAMP_CLIENT *client);
 
 /////////////////////////
 

@@ -25,7 +25,7 @@ bool client_suggest_target(YAAMP_CLIENT *client, json_value *json_params)
 bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 {
 	//if(client_find_my_ip(client->sock->ip)) return false;
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
+	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_ethash || is_etchash)
 		get_nonce_prefix(client->extranonce1_default);
 	else
 		get_next_extraonce1(client->extranonce1_default);
@@ -47,6 +47,7 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 
 	get_random_key(client->notify_id);
 
+	char ethstratum_version[64] = { 0 };
 	if(json_params->u.array.length>0)
 	{
 		if (json_params->u.array.values[0]->u.string.ptr)
@@ -57,6 +58,20 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 			client->difficulty_actual = g_stratum_nicehash_difficulty;
 		}
 
+		// NiceHash EthereumStratum/1.0.0 sends the protocol as the second
+		// parameter. Rigel sends it too but wants its own reply shape.
+		if ((is_ethash || is_etchash) && json_params->u.array.length > 1 &&
+			json_params->u.array.values[1]->u.string.ptr)
+		{
+			const char *v = json_params->u.array.values[1]->u.string.ptr;
+			if (!strncmp(v, "EthereumStratum/", 16))
+			{
+				strncpy(ethstratum_version, v, sizeof(ethstratum_version)-1);
+				if (!strstr(client->version, "Rigel"))
+					client->is_nicehash_ethstratum = true;
+			}
+		}
+
 		if(strstr(client->version, "proxy") || strstr(client->version, "/3."))
       client->reconnectable = false;
 
@@ -65,7 +80,7 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 		if(strstr(client->version, "cpuminer-opt")) client->stats = true;
 	}
 
-	if(json_params->u.array.length>1)
+	if(json_params->u.array.length>1 && !client->is_nicehash_ethstratum)
 	{
 		char notify_id[1024] = { 0 };
 		if (json_params->u.array.values[1]->u.string.ptr)
@@ -139,7 +154,45 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 		debuglog("new client with nonce %s\n", client->extranonce1);
 	}
 
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
+	if (is_ethash || is_etchash)
+	{
+		if (client->is_nicehash_ethstratum)
+		{
+			// NiceHash spec: [[subscription], extranonce1], no extranonce2;
+			// the first job follows authorize
+			client_send_result(client,
+				"[[\"mining.notify\",\"%s\",\"%s\"],\"%s\"]",
+				client->notify_id,
+				ethstratum_version[0] ? ethstratum_version : "EthereumStratum/1.0.0",
+				client->extranonce1);
+		}
+		else
+		{
+			// Rigel decodes exactly {mining_notify, extranonce}: mining_notify is
+			// one object with four string fields (_clean_jobs too); anything else
+			// fails its parse. Difficulty follows with mining.set_difficulty.
+			// The current job lets the miner start before the first notify.
+			YAAMP_JOB *job = job_get_last_for_ethash(client);
+			const char *seed = "0x0000000000000000000000000000000000000000000000000000000000000000";
+			const char *header = seed;
+			int jobid = 0;
+
+			if (job && job->templ && job->templ->eth_seed[0] && job->templ->eth_header[0])
+			{
+				seed = job->templ->eth_seed;
+				header = job->templ->eth_header;
+				jobid = job->id;
+				client->jobid_sent = job->id;
+			}
+
+			client_send_result(client,
+				"{\"mining_notify\":{\"job_id\":\"%x\",\"seed_hash\":\"%s\","
+				"\"header_hash\":\"%s\",\"_clean_jobs\":\"true\"},"
+				"\"extranonce\":\"%s\"}",
+				jobid, seed, header, client->extranonce1);
+		}
+	}
+	else if (is_kawpow || is_firopow || is_phihash || is_meowpow)
 	{
 		kawpow_send_nonceprefix(client);
 	}
@@ -669,6 +722,44 @@ void *client_thread(void *p)
 		{
 			clientlog(client, "using getwork"); // client using http:// url
 		}
+		else if((is_ethash || is_etchash) && !strcmp(method, "eth_submitLogin"))
+		{
+			// ethproxy (T-Rex, GMiner, Claymore): no mining.subscribe, so set up
+			// the session here. A repeated login must not rotate the prefix.
+			if (!client->is_ethproxy)
+			{
+				client->is_ethproxy = true;
+
+				// 24-bit prefix, sent in eth_getWork and prepended to the miner's
+				// nonce on submit; keep one from an earlier mining.subscribe
+				if (!client->extranonce1[0])
+					get_nonce_prefix(client->extranonce1);
+				snprintf(client->extranonce1_default, sizeof(client->extranonce1_default),
+					"%06x", (unsigned int) strtoul(client->extranonce1, NULL, 16) & 0xffffff);
+				strcpy(client->extranonce1, client->extranonce1_default);
+				strcpy(client->extranonce1_last, client->extranonce1);
+
+				// no extranonce2: keep the baselines equal, so job assignment never
+				// sees a change to reconnect on
+				client->extranonce2size_default = 0;
+				client->extranonce2size = 0;
+				client->extranonce2size_last = 0;
+			}
+
+			// subscribe sets the starting difficulty; without it the work would
+			// carry an all-ff target
+			if (!(client->difficulty_actual > 0) && g_stratum_difficulty > 0)
+				client->difficulty_actual = g_stratum_difficulty;
+
+			b = client_authorize(client, json_params);
+		}
+
+		else if((is_ethash || is_etchash) && !strcmp(method, "eth_getWork"))
+			b = ethash_ethproxy_get_work(client);
+
+		else if((is_ethash || is_etchash) && !strcmp(method, "eth_submitWork"))
+			b = ethash_ethproxy_submit_work(client, json_params);
+
 		else if(!strcmp(method, "eth_submitHashrate"))
 		{
 			b = client_send_result(client, "true"); // skip eth_submitHashrate method

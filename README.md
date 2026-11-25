@@ -322,7 +322,7 @@ Coin daemons should be configured to send block notifications to the stratum:
 blocknotify=blocknotify pool.example.com:port coinid %s
 ```
 
-Algo-specific setup: Firopow/Kiiro see [stratum/firopow/README.md](stratum/firopow/README.md).
+Algo-specific setup: Firopow/Kiiro see [stratum/firopow/README.md](stratum/firopow/README.md), Ethash/Etchash see [stratum/ethash/README.md](stratum/ethash/README.md).
 
 ---
 

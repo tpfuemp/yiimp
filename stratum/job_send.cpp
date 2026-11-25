@@ -112,6 +112,54 @@ static YAAMP_JOB *job_get_last(int coinid)
 	return NULL;
 }
 
+// Last job for a coin the miner asked for with mc=SYMBOL. For ethash a job
+// of another chain has another seed, i.e. a DAG rebuild of several GB.
+static YAAMP_JOB *job_get_last_for_client(YAAMP_CLIENT *client)
+{
+	if(client->coins_mining_list.empty()) return NULL;
+
+	g_list_job.Enter();
+	YAAMP_JOB *result = NULL;
+	for(CLI li = g_list_job.first; li && !result; li = li->prev)
+	{
+		YAAMP_JOB *job = (YAAMP_JOB *)li->data;
+		if(!job_can_mine(job) || !job->coind) continue;
+
+		for(auto it = client->coins_mining_list.begin(); it != client->coins_mining_list.end(); ++it)
+		{
+			if(*it == job->coind->symbol || *it == job->coind->symbol2)
+			{
+				result = job;
+				break;
+			}
+		}
+	}
+	g_list_job.Leave();
+	return result;
+}
+
+YAAMP_JOB *job_get_last_for_ethash(YAAMP_CLIENT *client)
+{
+	YAAMP_JOB *job = NULL;
+	if (!g_autoexchange) job = job_get_last(client->coinid);
+	if (!job) job = job_get_last_for_client(client);
+	if (!job) job = job_get_last(0);
+	return job;
+}
+
+// mining.notify (or the ethproxy work push) for this client
+static void job_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char *buffer, int gen = 0)
+{
+	if ((is_ethash || is_etchash) && client->is_ethproxy)
+		ethash_ethproxy_work_buffer(job, client, buffer);
+	else if (is_ethash || is_etchash)
+		ethash_job_mining_notify_buffer(job, client, buffer, gen);
+	else if (is_kawpow || is_firopow || is_phihash || is_meowpow)
+		kawpow_job_mining_notify_buffer(job, client, buffer, gen);
+	else
+		job_mining_notify_buffer(job, buffer, gen);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void job_send_last(YAAMP_CLIENT *client)
@@ -124,6 +172,7 @@ void job_send_last(YAAMP_CLIENT *client)
 		job = job_get_last(client->coinid);
 	}
 
+	if(!job) job = job_get_last_for_client(client);
 	if(!job) job = job_get_last(0);
 
 	if(!job) return;
@@ -132,13 +181,7 @@ void job_send_last(YAAMP_CLIENT *client)
 	client->jobid_sent = job->id;
 
 	char buffer[YAAMP_SMALLBUFSIZE];
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
-	{
-		kawpow_job_mining_notify_buffer(job, client, buffer);
-	}
-	else {
-		job_mining_notify_buffer(job, buffer);
-	}
+	job_notify_buffer(job, client, buffer);
 
 	socket_send_raw(client->sock, buffer, strlen(buffer));
 }
@@ -148,10 +191,7 @@ void job_send_last(YAAMP_CLIENT *client)
 void job_resend(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen)
 {
 	char buffer[YAAMP_SMALLBUFSIZE];
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
-		kawpow_job_mining_notify_buffer(job, client, buffer, gen);
-	else
-		job_mining_notify_buffer(job, buffer, gen);
+	job_notify_buffer(job, client, buffer, gen);
 
 	socket_send_raw(client->sock, buffer, strlen(buffer));
 }
@@ -166,13 +206,7 @@ void job_send_jobid(YAAMP_CLIENT *client, int jobid)
 	}
 
 	char buffer[YAAMP_SMALLBUFSIZE];
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
-	{
-		kawpow_job_mining_notify_buffer(job, client, buffer);
-	}
-	else {
-		job_mining_notify_buffer(job, buffer);
-	}
+	job_notify_buffer(job, client, buffer);
 
 	YAAMP_JOB_TEMPLATE *templ = job->templ;
 	client->jobid_sent = job->id;
@@ -206,18 +240,13 @@ void job_broadcast(YAAMP_JOB *job)
 		if(client->jobid_next != job->id) continue;
 		if(client->jobid_sent == job->id) continue;
 
+		// set_difficulty goes out before this job: the miner applies it from this job on
+		// (first, as ethproxy and kawpow carry the target in the job)
+		client_adjust_difficulty(client);
+
 		char buffer[YAAMP_SMALLBUFSIZE];
 		memset(buffer, 0, sizeof(buffer));
-		if (is_kawpow || is_firopow || is_phihash || is_meowpow)
-		{
-			kawpow_job_mining_notify_buffer(job, client, buffer);
-		}
-		else {
-			job_mining_notify_buffer(job, buffer);
-		}
-	
-		// set_difficulty goes out before this job: the miner applies it from this job on
-		client_adjust_difficulty(client);
+		job_notify_buffer(job, client, buffer);
 
 		client->jobid_sent = job->id;
 		client_add_job_history(client, job->id);
@@ -252,10 +281,16 @@ void job_broadcast(YAAMP_JOB *job)
 
 	bool is_equihash = (strstr(g_current_algo->name, "equihash") == g_current_algo->name);
 
-	uint64_t coin_target = decode_compact(templ->nbits, (is_equihash)? 19 : 25);
+	double coin_diff;
+	if (is_ethash || is_etchash)
+		coin_diff = job->coind ? job->coind->difficulty : 0;	// from the eth_getWork target
+	else
+	{
+		uint64_t coin_target = decode_compact(templ->nbits, (is_equihash)? 19 : 25);
 
-	if (templ->nbits && !coin_target) coin_target = 0xFFFF000000000000ULL; // under decode_compact min diff
-	double coin_diff = target_to_diff(coin_target);
+		if (templ->nbits && !coin_target) coin_target = 0xFFFF000000000000ULL; // under decode_compact min diff
+		coin_diff = target_to_diff(coin_target);
+	}
 
 	humanize_double(formated_jobspeed, sizeof("-XXX.YPh/s"), job->speed, "h/s",
 					HN_AUTOSCALE, HN_NOSPACE | HN_DECIMAL);

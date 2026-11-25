@@ -229,7 +229,21 @@ int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 //	debuglog("%s diff %f\n", client->sock->ip, difficulty);
 
 	bool is_equihash = (strstr(g_current_algo->name, "equihash") == g_current_algo->name);
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
+	if (is_ethash || is_etchash)
+	{
+		// ethash scale: target = 2^224 / difficulty (Rigel, T-Rex, miningcore)
+		uint8_t target_be[32];
+		ethash_diff_to_target(difficulty, target_be);
+		client->share_target = ethash_be_to_uint256(target_be);
+		client->next_target = client->share_target;
+
+		// ethproxy reads the target from its work: the next push carries it
+		if (client->is_ethproxy) return 0;
+
+		// a JSON number: Rigel does not parse a quoted value
+		client_call(client, "mining.set_difficulty", "[%.8g]", difficulty);
+	}
+	else if (is_kawpow || is_firopow || is_phihash || is_meowpow)
 	{
 		uint256 share_target;
 		diff_to_target(share_target, difficulty);
@@ -296,6 +310,16 @@ void client_initialize_difficulty(YAAMP_CLIENT *client)
 	{
 		client->difficulty_actual = g_stratum_difficulty;
 		diff_to_target(client->share_target, client->difficulty_actual);
+	}
+	else if (is_ethash || is_etchash)
+	{
+		// 256-bit target: the 64-bit range check below would reject usual values
+		double diff = client_normalize_difficulty(atof(value), client);
+		if (diff > 0 && isfinite(diff))
+		{
+			client->difficulty_actual = diff;
+			client->difficulty_fixed = fixed;
+		}
 	}
 	else {
 		double diff = client_normalize_difficulty(atof(value), client);

@@ -109,8 +109,13 @@ static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxha
 
 	else
 	{
-		strcpy(client->extranonce1, client->extranonce1_default);
-		client->extranonce2size = client->extranonce2size_default;
+		// ethash: the nonce prefix is fixed for the session (sent at subscribe or
+		// login, part of the miner's work); replacing it would reconnect the miner
+		if (!is_ethash && !is_etchash)
+		{
+			strcpy(client->extranonce1, client->extranonce1_default);
+			client->extranonce2size = client->extranonce2size_default;
+		}
 
 		// decred uses an extradata field in block header, 2 first uint32 are set by the miner
 		if (g_current_algo->name && !strcmp(g_current_algo->name,"decred")) {
@@ -129,7 +134,12 @@ static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxha
 	job->count++;
 
 //	debuglog(" assign %x, %f, %d, %s\n", job->id, client->speed, client->reconnecting, client->sock->ip);
-	if(strcmp(client->extranonce1, client->extranonce1_last) || client->extranonce2size != client->extranonce2size_last)
+	if(is_ethash || is_etchash)
+	{
+		strcpy(client->extranonce1_last, client->extranonce1);
+		client->extranonce2size_last = client->extranonce2size;
+	}
+	else if(strcmp(client->extranonce1, client->extranonce1_last) || client->extranonce2size != client->extranonce2size_last)
 	{
 //		debuglog("new nonce %x %s %s\n", job->id, client->extranonce1_last, client->extranonce1);
 		if(!client->extranonce_subscribe)

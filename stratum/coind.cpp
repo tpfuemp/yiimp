@@ -201,6 +201,11 @@ void coind_init(YAAMP_COIND *coind)
 
 	yaamp_create_mutex(&coind->mutex);
 
+	// Ethereum nodes have none of the wallet RPCs below: work and height come
+	// from eth_getWork/eth_blockNumber, the beneficiary is set on the node
+	if (is_ethash || is_etchash)
+		return;
+
 	strcpy(account, coind->account);
 	if(!strcmp(coind->rpcencoding, "DCR")) {
 		coind->usegetwork = true;
