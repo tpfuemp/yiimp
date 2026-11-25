@@ -21,9 +21,11 @@ class NestexDriver extends ExchangeDriver
 
     protected function publicApiQuery(string $method = 'cg/tickers', string $params = '', string $returnType = 'array'): mixed
     {
-        $url = "https://trade.nestex.one/api/{$method}";
+        // Public tickers moved from trade.nestex.one/api/* to api.nestex.one/*
+        // (the old URL returns a 301 HTML redirect that cannot be json_decoded).
+        $url = "https://api.nestex.one/{$method}";
         if ($params !== '') $url .= "?{$params}";
-        $raw = $this->curlRequest('GET', $url, [], '', false);
+        $raw = $this->curlRequest('GET', $url, [], '', false, [CURLOPT_FOLLOWLOCATION => true]);
         return $returnType === 'object' ? json_decode($raw) : json_decode($raw, true);
     }
 
@@ -63,6 +65,24 @@ class NestexDriver extends ExchangeDriver
         return true;
     }
 
+    /**
+     * Nestex private API v2 documents balances/orders/trades/place/cancel only.
+     * There is no withdrawal endpoint, so auto-withdraw cannot be implemented
+     * safely. Warn instead of guessing an undocumented endpoint.
+     */
+    private function autoWithdrawBtc($saveBalance): void
+    {
+        if (!$saveBalance) return;
+
+        $withdrawMin = $this->configFloat('withdraw_min_btc', defined('EXCH_AUTO_WITHDRAW') ? (float) EXCH_AUTO_WITHDRAW : 0.0);
+        if ($withdrawMin <= 0 || (float) $saveBalance->balance < $withdrawMin) return;
+
+        Yii::warning(
+            $this->name() . ': withdraw_min_btc is set but Nestex has no documented API withdrawal endpoint; withdraw manually',
+            __CLASS__
+        );
+    }
+
     // ── Operations ────────────────────────────────────────────────────────────
 
     public function updateMarkets(): void
@@ -93,8 +113,11 @@ class NestexDriver extends ExchangeDriver
                 $market->pricetime = time();
                 $market->save();
                 if (empty($coin->price) && $ask) {
-                    $coin->price  = $market->price;
-                    $coin->price2 = $price2;
+                    // NestEx only has USDT markets: convert the quote to BTC
+                    // using the cached rate, exactly like the NonKYC driver.
+                    $quote        = Yii::$app->YiimpUtils->quoteBtcPrice($market->base_coin, 1);
+                    $coin->price  = $market->price * $quote;
+                    $coin->price2 = $price2 * $quote;
                     $coin->save();
                 }
                 break;
@@ -145,15 +168,18 @@ class NestexDriver extends ExchangeDriver
             if ($sym === 'USDT' && $usdtPrice > 0) { $btcBal += ((float) $balance - $locked) / $usdtPrice; $btcLock += $locked / $usdtPrice; }
             $coins = Coins::find()->where(['or', ['symbol' => $sym], ['symbol2' => $sym]])->all();
             foreach ($coins as $coin) {
-                $market = Markets::find()->where(['coinid' => $coin->id])->andWhere(['like', 'name', 'nestex%', false])->one();
-                if (!$market) continue;
-                $market->balance = (float) $balance - $locked; $market->ontrade = $locked;
-                $market->balancetime = time(); $market->save();
+                foreach ($this->marketsForCoin($coin) as $market) {
+                    $market->balance = (float) $balance - $locked; $market->ontrade = $locked;
+                    $market->balancetime = time(); $market->save();
+                }
             }
         }
 
         $saveBalance = Balances::find()->where(['name' => $this->name()])->one();
         if ($saveBalance) { $saveBalance->balance = $btcBal; $saveBalance->onsell = $btcLock; $saveBalance->save(); }
+
+        // Withdrawal is controlled by withdraw_min_btc, not by the auto-trade flag.
+        $this->autoWithdrawBtc($saveBalance);
 
         if (!defined('YIIMP_ALLOW_EXCHANGE') || !YIIMP_ALLOW_EXCHANGE) return;
 
@@ -167,7 +193,8 @@ class NestexDriver extends ExchangeDriver
             if ($sym === 'USDT') continue;
             $coin = Coins::find()->where(['symbol' => $sym])->one();
             if (!$coin) continue;
-            $market = Markets::find()->where(['coinid' => $coin->id, 'name' => 'nestex USDT'])->one();
+            // Nestex only lists USDT pairs, stored as "nestex USDT".
+            $market = $this->findMarket($coin, 'USDT');
             if (!$market) continue;
             $locked   = (float) ($balances['locked'][$currency] ?? 0);
             $exOrders = [];

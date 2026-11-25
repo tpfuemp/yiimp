@@ -1,16 +1,22 @@
 <?php
 require_once('poloniex_trading.php');
 require_once('binance_trading.php');
-require_once('exbitron_trading.php');
 require_once('nestex_trading.php');
 require_once('kraken_trading.php');
 require_once('yobit_trading.php');
 require_once('hitbtc_trading.php');
 require_once('kucoin_trading.php');
 require_once('nonkyc_trading.php');
+require_once('safetrade_trading.php');
 
 function cancelExchangeOrder($order=false)
 {
+	// SafeTrade USDT orders are stored as "safetrade USDT".
+	if ($order && strpos((string) $order->market, 'safetrade') === 0) {
+		doSafeTradeCancelOrder($order->uuid);
+		return;
+	}
+
 	if ($order)
 		switch ($order->market)
 		{
@@ -25,9 +31,6 @@ function cancelExchangeOrder($order=false)
 				break;
 			case 'kucoin':
 				doKuCoinCancelOrder($order->uuid);
-				break;
-			case 'exbitron':
-				doExbitronCancelOrder($order->uuid);
 				break;
 			case 'nestex':
 				doNestexCancelOrder($order->uuid);
@@ -57,11 +60,6 @@ function runExchange($exchangeName=false)
 				getCexIoBalances();
 				break;
 
-			case 'exbitron':
-				doExbitronTrading(true);
-				updateExbitronMarkets();
-				break;
-			
 			case 'nestex':
 				doNestexTrading(true);
 				updateNestexMarkets();
@@ -95,6 +93,11 @@ function runExchange($exchangeName=false)
 			case 'nonkyc':
 				doNonkycTrading(true);
 				updateNonkycMarkets();
+				break;
+
+			case 'safetrade':
+				doSafeTradeTrading(true);
+				updateSafeTradeMarkets();
 				break;
 
 			default:

@@ -8,7 +8,6 @@ function updateRawcoins()
 	debuglog(__FUNCTION__);
 	// exit();
 	exchange_set_default('binance', 'disabled', true);
-	exchange_set_default('exbitron', 'disabled', false);
 	exchange_set_default('nestex', 'disabled', false);
 	exchange_set_default('hitbtc', 'disabled', true);
 	exchange_set_default('kraken', 'disabled', true);
@@ -62,34 +61,6 @@ function updateRawCoinExchange($marketname)
 	debuglog(__FUNCTION__);
 	debuglog("==== Exchange $marketname ====");
 	switch ($marketname) {
-		case 'exbitron':
-			if (!exchange_get($marketname, 'disabled')) 
-			{
-				$list = exbitron_api_query('cmc/summary');
-				if(is_array($list) && !empty($list))
-				{
-					// debuglog(json_encode($list));
-					dborun("UPDATE markets SET deleted=true WHERE name='$marketname'");
-					foreach($list as $key=>$data) {
-						$base = strtoupper($data->quote_currency);
-						$symbol = strtoupper($data->base_currency);
-						if (strtoupper($symbol) == 'BTC') {
-							if ((strtoupper($base) === 'USDT') ||
-							    (strtoupper($base) === 'USDC')) {
-									$symbol = strtoupper($data->quote_currency);
-									$base = strtoupper($data->base_currency);
-							}
-							else {
-								continue;
-							}
-						}
-
-						updateRawCoin($marketname, $symbol, $symbol, ($base == 'BTC')?null:$base);
-					}
-				}
-			}
-		break;
-
 		case 'nestex':
 			if (!exchange_get($marketname, 'disabled'))
 			{
@@ -188,15 +159,21 @@ function updateRawCoinExchange($marketname)
 	
 		case 'safetrade':
 			if (!exchange_get('safetrade', 'disabled')) {
-				$list = safetrade_api_query('trade/public/markets','','array');
+				$list = safetrade_markets(true);
 
-				if(is_array($list) && !empty($list)) {
-					dborun("UPDATE markets SET deleted=true WHERE name='safetrade'");
-					foreach ($list as $tickers) {
-						$base = strtoupper($tickers['quote_unit']);
-						if (strtoupper($base) !== 'BTC'||strtoupper($base) !== 'USDT')
-						$symbol = strtoupper($tickers['base_unit']);
-						updateRawCoin('safetrade', $symbol, $symbol, ($base == 'BTC')?null:$base);
+				if (!empty($list)) {
+					// Retire both the bare BTC row and the qualified quote rows.
+					dborun("UPDATE markets SET deleted=true WHERE name='safetrade' OR name LIKE 'safetrade %'");
+					foreach ($list as $meta) {
+						if (isset($meta['state']) && $meta['state'] !== 'enabled') continue;
+
+						$base = strtoupper(isset($meta['quote_unit']) ? $meta['quote_unit'] : '');
+						if (!safetrade_supported_quote($base)) continue;
+
+						$symbol = strtoupper(isset($meta['base_unit']) ? $meta['base_unit'] : '');
+						if ($symbol === '' || $symbol === 'BTC') continue;
+
+						updateRawCoin('safetrade', $symbol, $symbol, ($base === 'BTC') ? null : $base);
 					}
 				}
 			}
@@ -235,14 +212,16 @@ function updateRawCoinExchange($marketname)
 		break;
 		case 'hitbtc':
 			if (!exchange_get('hitbtc', 'disabled')) {
+				// v3 public/symbol is a map keyed by symbol, e.g. LTCBTC.
 				$list = hitbtc_api_query('symbols');
-				if(is_object($list) && isset($list->symbols) && is_array($list->symbols))
+				if(is_object($list))
 				{
 					dborun("UPDATE markets SET deleted=true WHERE name='hitbtc'");
-					foreach($list->symbols as $data) {
-						$base = strtoupper($data->currency);
+					foreach($list as $data) {
+						$base = strtoupper(isset($data->quote_currency) ? $data->quote_currency : '');
 						if ($base != 'BTC') continue;
-						$symbol = strtoupper($data->commodity);
+						$symbol = strtoupper(isset($data->base_currency) ? $data->base_currency : '');
+						if ($symbol === '' || $symbol === 'BTC') continue;
 						updateRawCoin('hitbtc', $symbol);
 					}
 				}
@@ -306,26 +285,10 @@ function updateRawCoinExchange($marketname)
 				{
 					dborun("UPDATE markets SET deleted=true WHERE name='kucoin'");
 					foreach($list->data as $item) {
-						$symbol = $item->name;
-						$name = $item->fullName;
+						// v2 exposes the ticker as "currency" (old v1 field: "name").
+						$symbol = isset($item->currency) ? $item->currency : $item->name;
+						$name = isset($item->fullName) ? $item->fullName : $symbol;
 						updateRawCoin('kucoin', $symbol, $name);
-					}
-				}
-			}
-		break;
-		case 'shapeshift':
-			if (!exchange_get('shapeshift', 'disabled')) {
-				$list = shapeshift_api_query('getcoins');
-				if(is_array($list) && !empty($list))
-				{
-					dborun("UPDATE markets SET deleted=true WHERE name='shapeshift'");
-					foreach($list as $item) {
-						$status = $item['status'];
-						if ($status != 'available') continue;
-						$symbol = strtoupper($item['symbol']);
-						$name = trim($item['name']);
-						updateRawCoin('shapeshift', $symbol, $name);
-						//debuglog("shapeshift: $symbol $name");
 					}
 				}
 			}

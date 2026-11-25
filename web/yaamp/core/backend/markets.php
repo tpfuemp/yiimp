@@ -81,9 +81,6 @@ function BackendPricesUpdateExchange($exchangename)
 		case 'safetrade':
 			updateSafeTradeMarkets();
 		break;
-		case 'exbitron':
-			updateExbitronMarkets();
-		break;
 		case 'nestex':
 			updateNestexMarkets();
 		break;
@@ -101,9 +98,6 @@ function BackendPricesUpdateExchange($exchangename)
 		break;
 		case 'bibox':
 			updateBiboxMarkets();
-		break;
-		case 'shapeshift':
-			updateShapeShiftMarkets();
 		break;
 		case 'nonkyc':
 			updateNonKYCMarkets();
@@ -245,131 +239,57 @@ function AverageIncrement($value1, $value2)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-function updateSafeTradeMarkets() {
+function updateSafeTradeMarkets()
+{
 	debuglog(__FUNCTION__);
 
 	$exchange = 'safetrade';
-	debuglog ("====== $exchange =======");
+	debuglog("====== $exchange =======");
 	if (exchange_get($exchange, 'disabled')) return;
 
-	// marketnames to base/coin - symbols
-	$marketlist = safetrade_api_query('trade/public/markets', '', 'array');
-	if(empty($marketlist) || !is_array($marketlist)) return;
-	$marketnames = array();
-	foreach($marketlist as $data) {
-		$marketnames[$data['id']] = [ 'coinsymbol' => $data['base_unit'], 'basesymbol' => $data['quote_unit']];
-	}
+	$markets = safetrade_markets(true);
+	if (empty($markets)) return;
 
-	$tickers = safetrade_api_query('trade/public/tickers');
-	foreach($tickers as $ticker_key => $ticker_data) {
-		if (!isset($marketnames[$ticker_key])) continue;
-		
-		$symbol = strtoupper($marketnames[$ticker_key]['coinsymbol']);
-		$base = strtoupper($marketnames[$ticker_key]['basesymbol']);
-		if($base != 'BTC') continue;
+	$tickers = safetrade_api_query('trade/public/tickers', '', 'array');
+	if (!is_array($tickers)) return;
 
-		// debuglog("$symbol : $base");
-		$coin = getdbosql('db_coins', "symbol=:sym", array(':sym'=>$symbol));
-		if(!$coin) continue;
-		$market = getdbosql('db_markets', "coinid={$coin->id} AND name='$exchange' AND IFNULL(base_coin,'') IN ('','BTC')");
-		$symbol = $coin->getOfficialSymbol();
-		if(!$market)
-		{
-			//debuglog ("$symbol not found in db");
+	foreach ($tickers as $id => $ticker) {
+		$id = strtolower((string) $id);
+		if (!isset($markets[$id])) continue;
+
+		$meta = $markets[$id];
+		if (isset($meta['state']) && $meta['state'] !== 'enabled') continue;
+
+		$symbol = strtoupper(isset($meta['base_unit']) ? $meta['base_unit'] : '');
+		$base = strtoupper(isset($meta['quote_unit']) ? $meta['quote_unit'] : '');
+		if ($symbol === '' || !safetrade_supported_quote($base)) continue;
+
+		$coin = getdbosql('db_coins', 'symbol=:sym', array(':sym' => $symbol));
+		if (!$coin) continue;
+
+		$market = safetrade_find_market($coin, $base);
+		if (!$market) {
 			$market = new db_markets;
 			$market->coinid = $coin->id;
-			#$market->disabled = 0;
+			$market->name = safetrade_market_name($base);
+			$market->base_coin = ($base === 'BTC') ? 'BTC' : $base;
 			$market->deleted = 0;
-			$market->name = $exchange;
-			//continue;	
 		}
-		else
-		{
-			//debuglog ("$symbol found in db");
-			$symbol = $coin->getOfficialSymbol();
-			if (market_get($exchange, $symbol, "disabled")) {
-				#$market->disabled = 1;
-				$market->message = 'disabled from settings';
-				$market->save();
-				continue;
-			}
-		}
-		$bid = bitcoinvaluetoa($ticker_data->low);
-		$ask = bitcoinvaluetoa($ticker_data->high);
 
-		// $market->disabled = ($bid == 0);
-		$price2 = ((double)$ask + (double)$bid)/2;
-
-		$market->price2 = AverageIncrement($market->price2, $price2);
-		$market->price = AverageIncrement($market->price, (double)$bid);
-		$market->priority = -1; // not ready for trading
-		$market->txfee = 0.2;
-		//debuglog("$exchange: $symbol price set to ".bitcoinvaluetoa($market->price));
-		$market->pricetime = time(); // $m->updated_time;
-		$market->save();
-		if (!empty($market->price2))
-		{
-			if ((empty($coin->price2))||($coin->price2==0)) {
-				$coin->price = $market->price;
-				$coin->price2 = $market->price2;
-				$coin->save();
-			}
-		}
-	}
-}
-
-function updateExbitronMarkets() {
-	debuglog(__FUNCTION__);
-	
-	$exchange = 'exbitron';
-	debuglog ("====== $exchange =======");
-
-	if (exchange_get($exchange, 'disabled')) { return; }
-
-	$list = getdbolist('db_markets', "name LIKE '$exchange%'");
-    if (empty($list)) { return; }
-
-	$data = exbitron_api_query('cmc/summary');
-	if(!is_array($data)) { return; }
-
-	foreach($list as $market) {
-		$coin = getdbo('db_coins', $market->coinid);
-		if(!$coin) { continue; }
-
-		$symbol = $coin->getOfficialSymbol();
-		$pair = strtoupper($symbol).'_BTC';
-	
-		if (!empty($market->base_coin))
-		{
-			$pair = strtoupper($symbol.'_'.$market->base_coin);
-		}
-		if (market_get($exchange, $symbol, "disabled"))
-		{
+		$official = $coin->getOfficialSymbol();
+		if (market_get($exchange, $official, 'disabled', null, $base)) {
 			$market->disabled = 1;
 			$market->message = 'disabled from settings';
 			$market->save();
 			continue;
 		}
 
-		/* Todo: price values inaccurate in aggregated market list
-			-> request each market separately with access rate limit */
-		foreach ($data as $ticker) {
-			$ticker_id = strtoupper($ticker->trading_pairs);
-			if ($ticker_id === $pair) {
-				$price2 = ($ticker->highest_bid+$ticker->lowest_ask)/2;
-				$market->price2 = AverageIncrement($market->price2, $price2);
-				$market->price = AverageIncrement($market->price, $ticker->highest_bid);
-				$market->pricetime = time(); // $ticker->timestamp "2018-08-31T12:48:56Z"
-				$market->save();
-				if (empty($coin->price) && $ticker->lowest_ask) {
-					$coin->price = $market->price;
-					$coin->price2 = $price2;
-					$coin->save();
-				}
-				// debuglog("$exchange: $pair price updated to {$market->price}");
-				break;
-			}
-		}
+		// Ticker low/high are 24h extremes, not bid/ask. Use the public depth
+		// endpoint for real executable prices; last trade is a safe fallback.
+		$prices = safetrade_best_prices($id, $ticker);
+		if (!$prices) continue;
+
+		safetrade_apply_market_prices($market, $coin, $prices['bid'], $prices['ask'], $base);
 	}
 }
 
@@ -425,8 +345,11 @@ function updateNestexMarkets()
 
 				if (empty($coin->price) && $ask)
 				{
-					$coin->price = $market->price;
-					$coin->price2 = $price2;
+					// Market prices are quoted in USDT; coins.price must stay in BTC.
+					// Convert exactly like updateNonKYCMarkets() does.
+					$quote = yiimp_quote_btc_price($market->base_coin, 1);
+					$coin->price = $market->price * $quote;
+					$coin->price2 = $price2 * $quote;
 					$coin->save();
 				}
 
@@ -1007,10 +930,10 @@ function updateHitBTCMarkets()
 			if($coin->installed && !$last_checked && empty($market->deposit_address))
 			{
 				sleep(1);
-				$res = hitbtc_api_user('payment/address/'.$symbol); // GET method
-				if(is_object($res) && isset($res->address)) {
-					if (!empty($res->address)) {
-						$market->deposit_address = $res->address;
+				$res = hitbtc_api_user('wallet/crypto/address', array('currency' => $symbol)); // GET method
+				if(is_array($res) && isset($res[0]->address)) {
+					if (!empty($res[0]->address)) {
+						$market->deposit_address = $res[0]->address;
 						debuglog("$exchange: deposit address for {$symbol} updated");
 						$market->save();
 						if ($symbol == 'WAVES' || $symbol == 'LSK') // Wallet address + Public key
@@ -1127,55 +1050,6 @@ function updateKuCoinMarkets()
 			if (empty($coin->price2)) {
 				$coin->price = $market->price;
 				$coin->price2 = $market->price2;
-				$coin->save();
-			}
-		}
-	}
-}
-
-// todo: store min/max txs limits
-function updateShapeShiftMarkets()
-{
-	$exchange = 'shapeshift';
-	if (exchange_get($exchange, 'disabled')) return;
-
-	$list = getdbolist('db_markets', "name LIKE '$exchange%'");
-	if (empty($list)) return;
-
-	$markets = shapeshift_api_query('marketinfo');
-	if(!is_array($markets) || empty($markets)) return;
-
-	foreach($list as $market)
-	{
-		$coin = getdbo('db_coins', $market->coinid);
-		if(!$coin) continue;
-
-		if (market_get($exchange, $coin->symbol, "disabled")) {
-			$market->disabled = 1;
-			$market->message = 'disabled from settings';
-			$market->save();
-			continue;
-		}
-
-		$symbol = $coin->getOfficialSymbol();
-		$pair = strtoupper($symbol).'_BTC';
-		if (!empty($market->base_coin))
-			$pair = strtoupper($symbol).'_'.strtoupper($market->base_coin);
-
-		foreach ($markets as $ticker) {
-			if ($ticker['pair'] != $pair) continue;
-
-			$market->price = AverageIncrement($market->price, $ticker['rate']);
-			$market->price2 = AverageIncrement($market->price2, $ticker['rate']);
-			$market->txfee = $ticker['minerFee'] * 100;
-			$market->pricetime = time();
-			$market->priority = -1; // not ready for trading
-			$market->save();
-
-			if (empty($coin->price2)) {
-				$coin->price = $market->price;
-				$coin->price2 = $market->price2;
-				//$coin->market = 'shapeshift';
 				$coin->save();
 			}
 		}

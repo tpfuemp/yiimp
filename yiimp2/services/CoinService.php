@@ -685,7 +685,6 @@ class CoinService
         // Apply default enabled/disabled flags per exchange
         $exchangeDefaults = [
             'binance'  => true,
-            'exbitron' => false,
             'nestex'   => false,
             'hitbtc'   => true,
             'kraken'   => true,
