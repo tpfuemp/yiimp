@@ -36,6 +36,10 @@ double coind_profitability(YAAMP_COIND *coind)
 
 double coind_nethash(YAAMP_COIND *coind)
 {
+	// Prefer the RPC-derived value stored by CoinService::updateCoinStats().
+	// Fall back to the legacy difficulty estimate if the job has not run yet.
+	if (coind->network_hash > 0) return coind->network_hash;
+
 	int blocktime = (coind->blocktime)? coind->blocktime : std::max(std::min(coind->actual_ttf, 60), 30);
 	int powlimit_bits = 32;
 
@@ -162,8 +166,9 @@ bool coind_validate_address(YAAMP_COIND *coind)
 	const char *acc = json_get_string(json_result, "account");
 	if (acc) strcpy(coind->account, acc);
 
-	if (!base58_decode(coind->wallet, coind->script_pubkey))
-		stratumlog("Warning: unable to decode %s %s script pubkey\n", coind->symbol, coind->wallet);
+	// Bech32 wallets cannot be base58-decoded; the scriptPubKey fallback below
+	// handles them, so only warn if that fallback also fails.
+	bool decoded_script = base58_decode(coind->wallet, coind->script_pubkey);
 
 	coind->p2sh_address = json_get_bool(json_result, "isscript");
 	coind->p2wpkh =  json_get_bool(json_result, "iswitness");
@@ -182,6 +187,8 @@ bool coind_validate_address(YAAMP_COIND *coind)
 			stratumlog("%s wallet addr '%s' seems incorrect!'", coind->symbol, coind->wallet);
 		}
 	}
+	if (!decoded_script && !strlen(coind->script_pubkey))
+		stratumlog("Warning: unable to decode %s %s script pubkey\n", coind->symbol, coind->wallet);
 	json_value_free(json);
 
 	return isvalid && ismine;

@@ -14,7 +14,7 @@
 #include <mstcpip.h>
 #endif
 
-bool opt_timeout = CURL_RPC_TIMEOUT; // 30sec
+long opt_timeout = CURL_RPC_TIMEOUT; // 30sec
 bool opt_debug = false;
 bool opt_protocol = false;
 bool opt_proxy = false;
@@ -199,7 +199,7 @@ static int sockopt_keepalive_cb(void *userdata, curl_socket_t fd,
 
 static json_value *curl_json_rpc(YAAMP_RPC *rpc, const char *url, const char *rpc_req, int *curl_err)
 {
-	char len_hdr[64] = { 0 }, auth_hdr[512] = { 0 };
+	char auth_hdr[512] = { 0 };
 	char curl_err_str[CURL_ERROR_SIZE] = { 0 };
 	struct data_buffer all_data = { 0 };
 	struct upload_buffer upload_data;
@@ -263,10 +263,13 @@ static json_value *curl_json_rpc(YAAMP_RPC *rpc, const char *url, const char *rp
 	upload_data.buf = rpc_req;
 	upload_data.len = strlen(rpc_req);
 	upload_data.pos = 0;
-	sprintf(len_hdr, "Content-Length: %lu", (unsigned long) upload_data.len);
+
+	// Tell libcurl the body size so it sends Content-Length instead of
+	// Transfer-Encoding: chunked. Some Bitcoin Core derivatives (Lumenite)
+	// reject requests that carry both headers with HTTP 400.
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long) upload_data.len);
 
 	headers = curl_slist_append(headers, "Content-Type: application/json");
-	headers = curl_slist_append(headers, len_hdr);
 	headers = curl_slist_append(headers, auth_hdr);
 	headers = curl_slist_append(headers, "User-Agent: " USER_AGENT);
 	headers = curl_slist_append(headers, "Accept:"); /* disable Accept hdr*/
@@ -419,11 +422,26 @@ json_value *rpc_curl_call(YAAMP_RPC *rpc, char const *method, char const *params
 	else
 		sprintf(message, "{\"method\":\"%s\",\"id\":\"%d\"}", method, ++rpc->id);
 
+	YAAMP_COIND *coind = rpc->coind;
+	if (coind && coind->rpcdebug) {
+		if (strlen(message) > (YAAMP_SMALLBUFSIZE/2))
+			debuglog("RPC-Call [%s] *** buffer too small ***\n", coind->name);
+		else
+			debuglog("RPC-Call [%s] %s\n", coind->name, message);
+	}
+
 	json_value *json = rpc_curl_do_call(rpc, message);
 	free(message);
 	//rpc_curl_close(rpc);
 
-	if(!json) return NULL;
+	if(!json) {
+		if (coind && coind->rpcdebug) {
+			char err[1024];
+			rpc_curl_get_lasterr(err, sizeof(err));
+			debuglog("RPC-Error [%s] %s: %s\n", coind->name, method, err);
+		}
+		return NULL;
+	}
 
 	int s2 = current_timestamp();
 	if(s2-s1 > 2000)
@@ -433,6 +451,21 @@ json_value *rpc_curl_call(YAAMP_RPC *rpc, char const *method, char const *params
 	{
 		json_value_free(json);
 		return NULL;
+	}
+
+	if (coind && coind->rpcdebug) {
+		json_value *result = json_get_object(json, "result");
+		json_value *error = json_get_object(json, "error");
+		if (error && error->type != json_null) {
+			json_value *msg = json_get_object(error, "message");
+			debuglog("RPC-Resp [%s] %s error %s\n", coind->name, method,
+				msg && msg->type == json_string ? msg->u.string.ptr : "");
+		} else if (result && result->type == json_boolean) {
+			debuglog("RPC-Resp [%s] %s result=%s\n", coind->name, method,
+				result->u.boolean ? "true" : "false");
+		} else {
+			debuglog("RPC-Resp [%s] %s ok\n", coind->name, method);
+		}
 	}
 
 	return json;
