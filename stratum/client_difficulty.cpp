@@ -10,9 +10,12 @@ double client_normalize_difficulty(double difficulty, YAAMP_CLIENT *client)
 		if(difficulty > g_stratum_nicehash_max_diff) difficulty = g_stratum_nicehash_max_diff;
 	}
 	else {
+		// nearest value with 3 significant digits (0.00351, 0.347, 34.7), then the limits
+		if(difficulty > 0) {
+			double m = pow(10, 2 - floor(log10(difficulty)));
+			difficulty = round(difficulty * m) / m;
+		}
 		if(difficulty < g_stratum_min_diff) difficulty = g_stratum_min_diff;
-		else if(difficulty < 1) difficulty = floor(difficulty*1000/2)/1000*2;
-		else if(difficulty > 1) difficulty = std::max(1.0, floor(difficulty/2)*2);	// 1..2 must not become 0
 		if(difficulty > g_stratum_max_diff) difficulty = g_stratum_max_diff;
 	}
 	return difficulty;
@@ -246,7 +249,8 @@ int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 		client_call(client, "mining.set_target", "[\"%s\"]", user_target_hex_reversed);
 	}
 	else {
-		if(difficulty >= 1)
+		// whole numbers as integers, others with decimals (3.47 must not become 3)
+		if(difficulty >= 1 && difficulty == floor(difficulty))
 			client_call(client, "mining.set_difficulty", "[%.0f]", difficulty);
 		else
 			client_call(client, "mining.set_difficulty", "[%0.8f]", difficulty);
