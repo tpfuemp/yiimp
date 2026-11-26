@@ -1,7 +1,9 @@
 
 #include "stratum.h"
 
-#define MAX_JOBAGE 120;
+#define MAX_JOBAGE 120
+// NEB jobs expire on the node after 300 s; keep late shares verifiable
+#define NEB_JOB_KEEPAGE 330
 
 #define RETURN_ON_CONDITION(condition, ret) \
 	if(condition) \
@@ -296,7 +298,7 @@ void job_check_status() {
 		if (!job->templ) { job->deleted = true; continue; }
 		if (!job->coind) { job->deleted = true; continue; }
 
-		tmpjobage = time(NULL) - MAX_JOBAGE;
+		tmpjobage = time(NULL) - (is_nebhash ? NEB_JOB_KEEPAGE : MAX_JOBAGE);
 		if (job->jobage <= tmpjobage) {
 //			debuglog("delete timeouted job %i from coin %s height %i\n",
 //					job->id, job->coind->symbol, job->templ->height);
@@ -305,7 +307,7 @@ void job_check_status() {
 		}
 
 
-		if (job->templ->height <= job->coind->height) {
+		if (!is_nebhash && job->templ->height <= job->coind->height) {
 //			debuglog("delete job %i from coin %s height %i\n",
 //					job->id, job->coind->symbol, job->templ->height);
 			job->deleted = true;

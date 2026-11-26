@@ -1,5 +1,6 @@
 
 #include "stratum.h"
+#include "nebhash/work.h"
 
 // sql injection security, unwanted chars
 void db_check_user_input(char* input)
@@ -217,6 +218,17 @@ void db_update_workers(YAAMP_DB *db)
 			db_clear_worker(db, client);
 			object_delete(client);
 			continue;
+		}
+
+		// NEB vardiff also runs without shares: a miner that never finds one
+		// can't trigger the submit-driven adjustment itself
+		if(is_nebhash && nebhash_vardiff_tick(client))
+			job_send_last(client);
+		// NEB speed: its own 600 s share-work window, decayed every pass
+		if (is_nebhash) {
+			nebhash_client_speed(client);
+			if (client->neb_last_share_time && (long long) time(NULL) - client->neb_last_share_time > 600)
+				client->speed = 0;
 		}
 
 		if(client->difficulty_written == client->difficulty_actual) continue;

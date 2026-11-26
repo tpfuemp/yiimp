@@ -76,7 +76,10 @@ static void share_add_worker(YAAMP_CLIENT *client, YAAMP_JOB *job, bool valid, c
 		double difficulty = client->share_difficulty > 0 ? client->share_difficulty : client->difficulty_actual;
 		worker->difficulty += difficulty / g_current_algo->diff_multiplier;
 		if (!isaux) {
-			client_speed_add(client, difficulty);
+			if (is_nebhash)
+				nebhash_client_note_share_speed(client, client->difficulty_actual);	// 600 s window of share work
+			else
+				client_speed_add(client, difficulty);
 		}
 		// log best share_diff
 		if (worker->share_diff < share_diff) worker->share_diff = share_diff;

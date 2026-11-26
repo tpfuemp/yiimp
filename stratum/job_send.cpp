@@ -170,9 +170,22 @@ YAAMP_JOB *job_get_last_for_ethash(YAAMP_CLIENT *client)
 	return job;
 }
 
-// mining.notify (or the ethproxy work push) for this client
-static void job_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char *buffer, int gen = 0)
+// NEB notifications carry a 26 KiB model hash plus a merkle branch
+#define NEB_NOTIFY_BUFSIZE (512*1024)
+
+// mining.notify (or the ethproxy work push) for this client; the message to send
+static const char *job_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char *buffer, int gen = 0)
 {
+	if (is_nebhash)
+	{
+		static thread_local char *neb_buffer = NULL;
+		if (!neb_buffer) neb_buffer = (char *)malloc(NEB_NOTIFY_BUFSIZE);
+		if (!neb_buffer) { buffer[0] = 0; return buffer; }
+		nebhash_job_mining_notify_buffer(job, client, neb_buffer, NEB_NOTIFY_BUFSIZE);
+		return neb_buffer;
+	}
+
+
 	if ((is_ethash || is_etchash) && client->is_ethproxy)
 		ethash_ethproxy_work_buffer(job, client, buffer);
 	else if (is_ethash || is_etchash)
@@ -183,6 +196,7 @@ static void job_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char *buffer
 		homescrypt_job_mining_notify_buffer(job, client, buffer, gen);
 	else
 		job_mining_notify_buffer(job, buffer, gen);
+	return buffer;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -206,9 +220,9 @@ void job_send_last(YAAMP_CLIENT *client)
 	client->jobid_sent = job->id;
 
 	char buffer[YAAMP_SMALLBUFSIZE];
-	job_notify_buffer(job, client, buffer);
+	const char *msg = job_notify_buffer(job, client, buffer);
 
-	socket_send_raw(client->sock, buffer, strlen(buffer));
+	socket_send_raw(client->sock, msg, strlen(msg));
 }
 
 // send the client its current job again under a new id (gen), so a new
@@ -216,9 +230,9 @@ void job_send_last(YAAMP_CLIENT *client)
 void job_resend(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen)
 {
 	char buffer[YAAMP_SMALLBUFSIZE];
-	job_notify_buffer(job, client, buffer, gen);
+	const char *msg = job_notify_buffer(job, client, buffer, gen);
 
-	socket_send_raw(client->sock, buffer, strlen(buffer));
+	socket_send_raw(client->sock, msg, strlen(msg));
 }
 
 void job_send_jobid(YAAMP_CLIENT *client, int jobid)
@@ -231,12 +245,12 @@ void job_send_jobid(YAAMP_CLIENT *client, int jobid)
 	}
 
 	char buffer[YAAMP_SMALLBUFSIZE];
-	job_notify_buffer(job, client, buffer);
+	const char *msg = job_notify_buffer(job, client, buffer);
 
 	YAAMP_JOB_TEMPLATE *templ = job->templ;
 	client->jobid_sent = job->id;
 
-	socket_send_raw(client->sock, buffer, strlen(buffer));
+	socket_send_raw(client->sock, msg, strlen(msg));
 	object_unlock(job);
 }
 
@@ -271,14 +285,14 @@ void job_broadcast(YAAMP_JOB *job)
 
 		char buffer[YAAMP_SMALLBUFSIZE];
 		memset(buffer, 0, sizeof(buffer));
-		job_notify_buffer(job, client, buffer);
+		const char *msg = job_notify_buffer(job, client, buffer);
 
 		client->jobid_sent = job->id;
 		client_add_job_history(client, job->id);
 
 		setsockopt(client->sock->sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
-		if (socket_send_raw(client->sock, buffer, strlen(buffer)) == -1) {
+		if (socket_send_raw(client->sock, msg, strlen(msg)) == -1) {
 			int err = errno;
 			client->broadcast_timeouts++;
 			// too much timeouts, disconnect him

@@ -26,6 +26,9 @@ SOURCES_MERAKI=$(SOURCES_MERAKI_C) $(SOURCES_MERAKI_CPP)
 SOURCES_HOMESCRYPT=homescrypt/homescrypt.cpp
 SOURCES_RANDOMSCASH=randomscash/randomscash.cpp
 SOURCES_ETHASH=ethash/params.cpp ethash/context.cpp ethash/work.cpp
+SOURCES_NEBHASH_C=nebhash/blake3_min.c nebhash/chacha8.c nebhash/nebhash2.c nebhash/shares.c
+SOURCES_NEBHASH_CPP=nebhash/work.cpp
+SOURCES_NEBHASH=$(SOURCES_NEBHASH_C) $(SOURCES_NEBHASH_CPP)
 
 CFLAGS += -DHAVE_CURL
 include arch.mk
@@ -34,7 +37,7 @@ SOURCES += rpc_curl.cpp
 #LDCURL = $(shell /usr/bin/pkg-config --static --libs libcurl)
 #LDFLAGS += $(LDCURL)
 
-OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_MERAKI_C:.c=.o) $(SOURCES_MERAKI_CPP:.cpp=.o) $(SOURCES_ETHASH:.cpp=.o) $(SOURCES_HOMESCRYPT:.cpp=.o) $(SOURCES_RANDOMSCASH:.cpp=.o)
+OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_MERAKI_C:.c=.o) $(SOURCES_MERAKI_CPP:.cpp=.o) $(SOURCES_ETHASH:.cpp=.o) $(SOURCES_HOMESCRYPT:.cpp=.o) $(SOURCES_RANDOMSCASH:.cpp=.o) $(SOURCES_NEBHASH_C:.c=.o) $(SOURCES_NEBHASH_CPP:.cpp=.o)
 OUTPUT=stratum
 
 CODEDIR1=algos
@@ -46,8 +49,8 @@ CODEDIR5=randomx
 
 .PHONY: projectcode1 projectcode2 projectcode3 projectcode4 projectcode5
 
-all: gitsubmodules projectcode1 projectcode2 projectcode3 projectcode4 projectcode5 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(SOURCES_RANDOMSCASH) $(OUTPUT)
-buildonly: projectcode1 projectcode2 projectcode3 projectcode4 projectcode5 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(SOURCES_RANDOMSCASH) $(OUTPUT)
+all: gitsubmodules projectcode1 projectcode2 projectcode3 projectcode4 projectcode5 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(SOURCES_RANDOMSCASH) $(SOURCES_NEBHASH) $(OUTPUT)
+buildonly: projectcode1 projectcode2 projectcode3 projectcode4 projectcode5 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(SOURCES_RANDOMSCASH) $(SOURCES_NEBHASH) $(OUTPUT)
 
 gitsubmodules:
 	git submodule init && git submodule update
@@ -78,6 +81,7 @@ $(SOURCES_MERAKI): stratum.h meraki/hash.h meraki/helpers.hpp meraki/meraki.h me
 $(SOURCES_HOMESCRYPT): stratum.h homescrypt/homescrypt.h
 $(SOURCES_RANDOMSCASH): stratum.h randomscash/randomscash.h randomx/src/randomx.h
 $(SOURCES_ETHASH): stratum.h ethash/params.h ethash/context.h ethash/work.h
+$(SOURCES_NEBHASH): stratum.h nebhash/work.h nebhash/shares.h nebhash/nebhash2.h nebhash/blake3_min.h nebhash/chacha8.h
 
 # HomeScrypt v1.2 consensus needs exact IEEE-754 fmaf rounding: no FMA
 # contraction or fast-math for it
@@ -124,6 +128,7 @@ clean:
 	rm -f kawpow/lib/ethash/*.o
 	rm -f firopow/*.o
 	rm -f firopow/lib/*.o
+	rm -f nebhash/*.o
 	rm -f ethash/*.o
 	rm -f homescrypt/*.o
 	rm -f randomscash/*.o

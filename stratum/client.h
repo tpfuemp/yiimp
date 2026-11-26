@@ -147,7 +147,46 @@ public:
 	//////////////////////////////////////////////////
 	uint256 share_target;
 	uint256 next_target;
-	
+
+	// NEB (neb-pool/1) session state. The k-values are the reference pool's
+	// vardiff window: target = job share_target << k, with the previous,
+	// easier target accepted briefly after a change.
+	bool neb_subscribed;
+	bool neb_authorized;
+	uint64_t neb_session;
+	// A neb-pool/1 session may authorize several logins (dev-fee miners do).
+	char neb_logins[8][1088];
+	int neb_login_userid[8];
+	int neb_login_workerid[8];
+	bool neb_login_solo[8];
+	int neb_login_count;
+	uint32_t neb_k;
+	uint32_t neb_k_prev;
+	long long neb_k_changed;
+	// Non-zero when d=/sd= selected a miner-visible difficulty instead of a
+	// legacy integer k shift. The pool target is derived from
+	// neb_diff * 10^10 and clamped to the job's share target.
+	double neb_diff;
+	double neb_diff_prev;
+	long long neb_vardiff_start;
+	int neb_vardiff_shares;
+	long long neb_second_start;
+	int neb_second_shares;
+	// Last accepted share, used only to expire a stale speed estimate.
+	long long neb_last_share_time;
+	// Exponential 600s rolling window of expected share work (the session's
+	// target difficulty). NEB shares are poisson-distributed, so a single
+	// share interval is far too noisy to use as the displayed hashrate (a
+	// lucky 4s interval showed 43 Mh/s). neb_speed_start is the last decay
+	// timestamp; displayed speed is neb_speed_diff / 600.
+	long long neb_speed_start;
+	double neb_speed_diff;
+	int neb_bad_in_a_row;
+	int neb_models_count;
+	char neb_models[8][65];
+	bool neb_first_job;
+	bool neb_vardiff_repush;
+
 	bool solo;
 };
 

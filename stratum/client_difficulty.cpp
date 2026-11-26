@@ -134,6 +134,10 @@ static void client_vardiff_apply(YAAMP_CLIENT *client, const char *trigger, doub
 // band check, on each job sent to the client
 void client_adjust_difficulty(YAAMP_CLIENT *client)
 {
+	// NEB uses the reference pool's k-window vardiff and publishes exact
+	// 256-bit targets from nebhash_submit(); never run yiimp's second vardiff.
+	if (is_nebhash) return;
+
 	if(client->difficulty_remote) {
 		client_change_difficulty(client, client->difficulty_remote);
 		return;
@@ -162,6 +166,8 @@ void client_adjust_difficulty(YAAMP_CLIENT *client)
 // speed window does not delay it
 void client_vardiff_share(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen)
 {
+	if (is_nebhash) return;	// own k-window vardiff in nebhash/work.cpp
+
 	// a share from the resent job: the miner works at the new difficulty now
 	if(client->difficulty_new_gen && job && job->id == client->difficulty_prev_jobid && gen >= client->difficulty_new_gen)
 		client->difficulty_confirmed = true;
@@ -194,6 +200,9 @@ bool client_vardiff_at_floor(YAAMP_CLIENT *client)
 // in any case, e.g. remote difficulty) means it's not mining.
 bool client_idle(YAAMP_CLIENT *client, int *idle)
 {
+	*idle = 0;
+	if (is_nebhash) return false;	// NEB shares are far too rare for this
+
 	int now = time(NULL);
 	int last = std::max(client->last_share, client->speed_since);
 	*idle = now - last;
@@ -207,6 +216,7 @@ bool client_idle(YAAMP_CLIENT *client, int *idle)
 // share silence, from the job thread (job_update) with the client's current job
 void client_vardiff_silence(YAAMP_CLIENT *client, YAAMP_JOB *job)
 {
+	if (is_nebhash) return;
 	if(client->difficulty_remote || client->difficulty_fixed) return;
 	if(client_vardiff_undelivered(client)) return;
 	if(client_vardiff_at_floor(client)) return;	// idle handling (client_idle) takes over
@@ -226,6 +236,10 @@ void client_vardiff_silence(YAAMP_CLIENT *client, YAAMP_JOB *job)
 
 int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 {
+	// NEB targets are 256-bit little-endian and travel with each job. The
+	// generic set_difficulty/set_target paths use incompatible byte order.
+	if (is_nebhash) return 0;
+
 //	debuglog("%s diff %f\n", client->sock->ip, difficulty);
 
 	bool is_equihash = (strstr(g_current_algo->name, "equihash") == g_current_algo->name);

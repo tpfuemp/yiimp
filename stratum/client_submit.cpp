@@ -578,6 +578,9 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 {
 	client->submit_share_diff = -1;
 
+	if (is_nebhash)
+		return nebhash_submit(client, json_params);
+
 	if (is_ethash || is_etchash)
 		return ethash_submit(client, json_params);
 

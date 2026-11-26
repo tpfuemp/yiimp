@@ -82,6 +82,7 @@ extern bool is_homescrypt;
 extern bool is_randomscash;
 extern bool is_ethash;
 extern bool is_etchash;
+extern bool is_nebhash;
 
 extern int g_tcp_port;
 
@@ -117,6 +118,12 @@ extern int g_stratum_share_timeout;
 extern int g_stratum_speed_slot_secs;
 extern int g_stratum_idle_timeout;
 extern bool g_stratum_allow_static_diff;
+
+extern char g_nebhash_work_host[256];
+extern int g_nebhash_work_port;
+extern char g_nebhash_dataset[1024];
+extern char g_nebhash_chain_id[65];
+extern uint32_t g_nebhash_start_k;
 
 extern double g_stratum_nicehash_difficulty;
 extern double g_stratum_nicehash_min_diff;
@@ -179,6 +186,7 @@ extern volatile bool g_exiting;
 #include "ethash/params.h"
 #include "ethash/context.h"
 #include "ethash/work.h"
+#include "nebhash/work.h"
 
 extern YAAMP_DB *g_db;
 extern YAAMP_ALGO g_algos[];
