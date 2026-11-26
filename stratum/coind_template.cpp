@@ -289,6 +289,10 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		// Kiiro Core requires explicit segwit rule support in the GBT request.
 		sprintf(params, "[{\"mode\":\"template\",\"rules\":[\"segwit\"]},\"%s\"]", coind->wallet);
 	}
+	else if (is_homescrypt) {
+		// Lumenite Core v1.2 wants both rule sets
+		strcpy(params, "[{\"rules\":[\"segwit\",\"mweb\"]}]");
+	}
 	else if (is_kawpow || is_phihash || is_meowpow || is_evrprogpow || is_meraki) {
 		sprintf(params, "[]");
 	}
@@ -297,7 +301,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	}
 
 	if(!strcmp(coind->symbol, "PPC")) strcpy(params, "[]");
-	else if(g_stratum_segwit && !is_firopow) strcpy(params, "[{\"rules\":[\"segwit\"]}]");
+	else if(g_stratum_segwit && !is_firopow && !is_homescrypt) strcpy(params, "[{\"rules\":[\"segwit\"]}]");
        
 	coind->usemweb |= g_stratum_mweb;
 

@@ -271,6 +271,7 @@ int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 		client_call(client, "mining.set_target", "[\"%s\"]", user_target_hex_reversed);
 	}
 	else {
+		difficulty = homescrypt_wire_difficulty(client, difficulty);
 		// whole numbers as integers, others with decimals (3.47 must not become 3)
 		if(difficulty >= 1 && difficulty == floor(difficulty))
 			client_call(client, "mining.set_difficulty", "[%.0f]", difficulty);

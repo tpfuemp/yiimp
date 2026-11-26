@@ -3,11 +3,34 @@
 
 uint64_t lyra2z_height = 0;
 
+bool homescrypt_uses_gpuminer_job(const YAAMP_CLIENT *client)
+{
+	return client && strstr(client->version, "gpuminer");
+}
+
+// gpuminer reads difficulty against Lumenite's block powlimit (0x3ffff << 224),
+// the pool's share scale is 0xffff << 208
+static const double homescrypt_gpuminer_scale = ((double)0x3ffff / (double)0xffff) * 65536.0;
+
+double homescrypt_wire_difficulty(const YAAMP_CLIENT *client, double difficulty)
+{
+	return (is_homescrypt && homescrypt_uses_gpuminer_job(client)) ? difficulty * homescrypt_gpuminer_scale : difficulty;
+}
+
+// Lumenite checks the full 256-bit digest: the 64-bit slice ignores the top
+// bytes, which matter at its very low difficulty
+static bool homescrypt_full_hash_le(const unsigned char *hash_bin, const arith_uint256 &target)
+{
+	uint256 hash256;
+	memcpy(hash256.begin(), hash_bin, 32);
+	return UintToArith256(hash256) <= target;
+}
+
 //#define MERKLE_DEBUGLOG
 //#define DONTSUBMIT
 
 void build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *templ,
-	const char *nonce1, const char *nonce2, const char *ntime, const char *nonce, uint32_t versionbits)
+	const char *nonce1, const char *nonce2, const char *ntime, const char *nonce, uint32_t versionbits, bool compute_hash)
 {
 	STRFMT(submitvalues->coinbase, "%s%s%s%s", templ->coinb1, nonce1, nonce2, templ->coinb2);
 	int coinbase_len = strlen(submitvalues->coinbase);
@@ -76,6 +99,7 @@ void build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *tem
 	}
 
 	binlify(submitvalues->header_bin, submitvalues->header_be);
+	if (!compute_hash) return;
 
 //	printf("%s\n", submitvalues->header_be);
 	int header_len = strlen(submitvalues->header)/2;
@@ -266,6 +290,15 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 	coin_target = decode_compact(templ->nbits, (is_equihash)? 19 : 25);
 	if (templ->nbits && !coin_target) coin_target = 0xFFFF000000000000ULL;
 
+	bool block_hash_ok = (hash_int <= coin_target);
+	if (is_homescrypt)
+	{
+		arith_uint256 full_target;
+		bool negative = false, overflow = false;
+		full_target.SetCompact((uint32_t)strtoul(templ->nbits, NULL, 16), &negative, &overflow);
+		block_hash_ok = !negative && !overflow && homescrypt_full_hash_le(submitvalues->hash_bin, full_target);
+	}
+
 	int block_size = YAAMP_SMALLBUFSIZE;
 	vector<string>::const_iterator i;
 
@@ -353,7 +386,7 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 		CommonUnlock(&coind_aux->aux_mutex);
 	}
 
-	if(hash_int <= coin_target)
+	if(block_hash_ok)
 	{
 		char count_hex[8] = { 0 };
 		if (templ->txcount <= 252)
@@ -719,7 +752,26 @@ if (g_debuglog_hash) {
         debuglog("coin %016lx \n", coin_target);
 }
 
-	if(hash_int_scaled > user_target && hash_int > coin_target)
+	bool share_ok = (hash_int_scaled <= user_target || hash_int <= coin_target);
+	// HomeScrypt: no coin-target fallback; gpuminer checks the full digest on
+	// its own scale, credited back on the pool's
+	double homescrypt_share_diff = 0;
+	bool is_gpuminer = is_homescrypt && homescrypt_uses_gpuminer_job(client);
+	if (is_homescrypt)
+		share_ok = (hash_int_scaled <= user_target);
+	if (is_gpuminer)
+	{
+		uint256 hash256;
+		memcpy(hash256.begin(), submitvalues.hash_bin, 32);
+		double hash_double = UintToArith256(hash256).getdouble();
+		arith_uint256 share_base;
+		share_base.SetHex("0000ffff0000000000000000000000000000000000000000000000000000");
+		homescrypt_share_diff = hash_double > 0 ? share_base.getdouble() / hash_double : 0;
+		client->submit_share_diff = homescrypt_share_diff;
+		share_ok = client->share_difficulty > 0 && homescrypt_share_diff >= client->share_difficulty;
+	}
+
+	if(!share_ok)
 	{
 		client_submit_error(client, job, 26, "Low difficulty share", extranonce2, ntime, nonce);
 		return true;
@@ -749,7 +801,7 @@ if (g_debuglog_hash) {
 		if (!client_ask_stats(client)) client->stats = false;
 	}
 
-	double share_diff = target_to_diff(hash_int);
+	double share_diff = is_gpuminer ? homescrypt_share_diff : target_to_diff(hash_int);
 	double share_diff_coin = target_to_diff_coin(hash_int, job->coind->powlimit_bits - ((is_equihash)? 0 : 16));
 
 //	if (g_current_algo->diff_multiplier != 0) {

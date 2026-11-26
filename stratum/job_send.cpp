@@ -94,6 +94,29 @@ static void job_mining_notify_buffer(YAAMP_JOB *job, char *buffer, int gen = 0)
 		jobid, templ->prevhash_be, templ->coinb1, templ->coinb2, templ->txmerkles, templ->version, templ->nbits, templ->ntime);
 }
 
+// MukiMiner takes a complete 80-byte header and only fills in the nonce;
+// other HomeScrypt miners get standard jobs
+bool homescrypt_uses_header_notify(const YAAMP_CLIENT *client)
+{
+	const char *version = client->version;
+	return strstr(version, "Muki") || strstr(version, "muki");
+}
+
+// the header from the same template/coinbase the submit is verified against;
+// fixed extranonce2, the miner echoes it back
+static void homescrypt_job_mining_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char *buffer, int gen)
+{
+	YAAMP_JOB_TEMPLATE *templ = job->templ;
+	YAAMP_JOB_VALUES submitvalues;
+	memset(&submitvalues, 0, sizeof(submitvalues));
+	build_submit_values(&submitvalues, templ, client->extranonce1, "00000000", templ->ntime, "00000000", 0, false);
+
+	char jobid[32];
+	job_notify_id(jobid, job, gen);
+	snprintf(buffer, YAAMP_SMALLBUFSIZE, "{\"id\":null,\"method\":\"mining.notify\",\"params\":[\"%s\",\"%s\",\"%s\",true,\"%s\",\"%s\"]}\n",
+		jobid, submitvalues.header_be, templ->nbits, "00000000", templ->ntime);
+}
+
 static YAAMP_JOB *job_get_last(int coinid)
 {
 	g_list_job.Enter();
@@ -156,6 +179,8 @@ static void job_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char *buffer
 		ethash_job_mining_notify_buffer(job, client, buffer, gen);
 	else if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow || is_meraki)
 		kawpow_job_mining_notify_buffer(job, client, buffer, gen);
+	else if (is_homescrypt && homescrypt_uses_header_notify(client))
+		homescrypt_job_mining_notify_buffer(job, client, buffer, gen);
 	else
 		job_mining_notify_buffer(job, buffer, gen);
 }

@@ -175,6 +175,11 @@ void job_send_jobid(YAAMP_CLIENT *client, int jobid);
 void job_send_last(YAAMP_CLIENT *client);
 void job_resend(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen);
 void job_notify_id(char *out, YAAMP_JOB *job, int gen);
+
+// header and coinbase for a submit; compute_hash false skips the PoW hash
+void build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *templ,
+	const char *nonce1, const char *nonce2, const char *ntime, const char *nonce,
+	uint32_t versionbits, bool compute_hash = true);
 void job_broadcast(YAAMP_JOB *job);
 
 // job for an ethash client, honouring mc=SYMBOL

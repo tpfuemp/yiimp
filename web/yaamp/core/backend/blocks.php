@@ -111,7 +111,8 @@ function BackendBlockNew($coin, $db_block)
 			$timelast_shared = (int) arraySafeVal($last_shared, 'time');
       
 			$total_shared_difficulty = dboscalar("SELECT SUM(difficulty) FROM shares WHERE coinid=:coinid AND algo=:algo AND solo=0 AND time>=$timelast_shared", array(':algo'=>$coin->algo,':coinid'=>$coin->id));
-			$effort = round($total_shared_difficulty * 100 / $db_block->difficulty, 2);
+			$share_difficulty = block_difficulty_for_shares($coin, $db_block->difficulty);
+			$effort = $share_difficulty > 0 ? round($total_shared_difficulty * 100 / $share_difficulty, 2) : 0;
 			$db_block->effort = $effort;
 			
 			$db_block->solo = 0;
@@ -168,7 +169,8 @@ function BackendBlockNew($coin, $db_block)
 		$timelast_solo = (int) arraySafeVal($last_solo, 'time');
       
 		$total_solo_difficulty = dboscalar("SELECT SUM(difficulty) FROM shares WHERE coinid=:coinid AND algo=:algo AND solo=1 AND time>=$timelast_solo", array(':algo'=>$coin->algo,':coinid'=>$coin->id));
-		$effort = round($total_solo_difficulty * 100 / $db_block->difficulty, 2);
+		$share_difficulty = block_difficulty_for_shares($coin, $db_block->difficulty);
+		$effort = $share_difficulty > 0 ? round($total_solo_difficulty * 100 / $share_difficulty, 2) : 0;
 		$db_block->effort = $effort;
 		
 		$db_block->solo = 1;
@@ -473,7 +475,16 @@ function BackendBlockFind2($coinid = NULL)
 			$db_block->algo = $coin->algo;
 
 			if (arraySafeVal($blockext,'nonce',0) != 0) {
-				$db_block->difficulty_user = hash_to_difficulty($coin, $transaction['blockhash']);
+				if ($coin->algo == 'homescrypt') {
+					// Lumenite's block hash is SHA256d, not the HomeScrypt PoW digest:
+					// use the best share difficulty of the round
+					$shareDiff = dboscalar("SELECT MAX(share_diff) FROM shares WHERE coinid=:coin AND algo=:algo ".
+						"AND valid=1 AND blocknumber<=:h AND blockrewarded IS NULL", array(
+						':coin'=>$coin->id, ':algo'=>$coin->algo, ':h'=>(int)$blockext['height']
+					));
+					$db_block->difficulty_user = (float) $shareDiff ?: (float) $coin->difficulty;
+				} else
+					$db_block->difficulty_user = hash_to_difficulty($coin, $transaction['blockhash']);
 			} else if (($coin->rpcencoding == 'POS') && (arraySafeVal($blockext,'flags') == 'proof-of-stake')) {
 				$db_block->category = 'stake';
 			}

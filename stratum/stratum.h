@@ -78,6 +78,7 @@ extern bool is_phihash;
 extern bool is_meowpow;
 extern bool is_evrprogpow;
 extern bool is_meraki;
+extern bool is_homescrypt;
 extern bool is_ethash;
 extern bool is_etchash;
 
@@ -173,6 +174,7 @@ extern volatile bool g_exiting;
 #include "phihash/hash.h"
 #include "meraki/hash.h"
 #include "meraki/meraki.h"
+#include "homescrypt/homescrypt.h"
 #include "ethash/params.h"
 #include "ethash/context.h"
 #include "ethash/work.h"

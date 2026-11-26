@@ -104,6 +104,7 @@ bool is_phihash = false;
 bool is_meowpow = false;
 bool is_evrprogpow = false;
 bool is_meraki = false;
+bool is_homescrypt = false;
 bool is_ethash = false;
 bool is_etchash = false;
 
@@ -112,6 +113,11 @@ bool is_etchash = false;
 static void scrypt_hash(const char* input, char* output, uint32_t len)
 {
 	scrypt_1024_1_1_256((unsigned char *)input, (unsigned char *)output);
+}
+
+static void homescrypt_hash(const char* input, char* output, uint32_t len)
+{
+	homescrypt_v12((const unsigned char *)input, (unsigned char *)output);
 }
 
 static void scryptn_hash(const char* input, char* output, uint32_t len)
@@ -190,6 +196,7 @@ YAAMP_ALGO g_algos[] =
 	{"heavyhash", heavyhash_hash, 1, 0, 0}, /* OBTC */
 	{"hex", hex_hash, 0x100, 0, sha256_hash_hex },
 	{"hive", hive_hash, 0x10000, 0, 0},
+	{"homescrypt", homescrypt_hash, 1, 0, 0},
 	{"hmq1725", hmq17_hash, 0x10000, 0, 0},
 	{"honeycomb", beenode_hash, 0x10000, 0, 0},
 	{"hoohash-pepew", hoohash_hash, 0x10000, 0, 0},
@@ -467,6 +474,10 @@ int main(int argc, char **argv)
 	else if (!strcmp(g_current_algo->name,"meraki"))
 	{
 		is_meraki = true;
+	}
+	else if (!strcmp(g_current_algo->name,"homescrypt"))
+	{
+		is_homescrypt = true;
 	}
 	else if (!strcmp(g_current_algo->name,"ethash"))
 	{

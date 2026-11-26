@@ -172,6 +172,10 @@ function BackendCoinsUpdate()
         if ($coin->algo == 'firopow' || $coin->symbol == 'KIIRO') {
             $template = $remote->getblocktemplate('{"mode":"template","rules":["segwit"]},' . json_encode((string) $coin->master_wallet));
         }
+        // Lumenite Core v1.2 requires both rule sets
+        else if ($coin->algo == 'homescrypt') {
+            $template = $remote->getblocktemplate('{"rules":["segwit","mweb"]}');
+        }
         // Change for segwit
 		else if ($coin->usemweb) {
 			$template = $remote->getblocktemplate('{"rules":["segwit","mweb"]}');

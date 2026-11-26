@@ -158,8 +158,9 @@ class BlockService
                 [':coin' => $coin->id, ':algo' => $coin->algo, ':since' => $timeLastShared]
             )->queryScalar();
 
-            if ($block->difficulty) {
-                $block->effort = round($totalDiff * 100 / $block->difficulty, 2);
+            $shareDifficulty = Yii::$app->ConversionUtils->block_difficulty_for_shares($coin, $block->difficulty);
+            if ($shareDifficulty > 0) {
+                $block->effort = round($totalDiff * 100 / $shareDifficulty, 2);
             }
             $block->solo = 0;
             $block->save();
@@ -223,8 +224,9 @@ class BlockService
                 [':coin' => $coin->id, ':algo' => $coin->algo, ':since' => $timeLastSolo]
             )->queryScalar();
 
-            if ($block->difficulty) {
-                $block->effort = round($totalDiff * 100 / $block->difficulty, 2);
+            $shareDifficulty = Yii::$app->ConversionUtils->block_difficulty_for_shares($coin, $block->difficulty);
+            if ($shareDifficulty > 0) {
+                $block->effort = round($totalDiff * 100 / $shareDifficulty, 2);
             }
             $block->solo = 1;
             $block->save();
@@ -582,7 +584,19 @@ class BlockService
 
                 if (($blockExt['nonce'] ?? 0) != 0) {
                     // PoW block — compute user-facing difficulty from block hash.
-                    $newBlock->difficulty_user = Yii::$app->ConversionUtils->hash_to_difficulty($coin, $transaction['blockhash']);
+                    if ($coin->algo === 'homescrypt') {
+                        // Lumenite's block hash is SHA256d, not the HomeScrypt PoW
+                        // digest: use the best share difficulty of the round
+                        $shareDiff = $db->createCommand(
+                            'SELECT MAX(share_diff) FROM shares
+                             WHERE coinid=:coin AND algo=:algo AND valid=1
+                               AND blocknumber<=:h AND blockrewarded IS NULL',
+                            [':coin' => $coin->id, ':algo' => $coin->algo, ':h' => (int) $blockExt['height']]
+                        )->queryScalar();
+                        $newBlock->difficulty_user = (float) $shareDiff ?: (float) $coin->difficulty;
+                    } else {
+                        $newBlock->difficulty_user = Yii::$app->ConversionUtils->hash_to_difficulty($coin, $transaction['blockhash']);
+                    }
                 } elseif ($coin->rpcencoding === 'POS' && ($blockExt['flags'] ?? '') === 'proof-of-stake') {
                     $newBlock->category = 'stake';
                 }

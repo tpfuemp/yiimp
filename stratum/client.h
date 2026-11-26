@@ -201,6 +201,12 @@ double client_share_difficulty(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen);
 int client_jobid_gen(const char *jobid);
 
 void client_initialize_difficulty(YAAMP_CLIENT *client);
+// HomeScrypt miners: MukiMiner takes prebuilt headers; gpuminer (xmrig-based)
+// sends its nonce byte-reversed and reads difficulty on Lumenite's powlimit
+bool homescrypt_uses_header_notify(const YAAMP_CLIENT *client);
+bool homescrypt_uses_gpuminer_job(const YAAMP_CLIENT *client);
+double homescrypt_wire_difficulty(const YAAMP_CLIENT *client, double difficulty);
+
 const char *client_password_param(const char *password, const char *key, size_t keylen);
 bool client_configure(YAAMP_CLIENT *client, json_value *json_params);
 
