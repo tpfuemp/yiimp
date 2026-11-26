@@ -106,6 +106,10 @@ write_case('fixtures', 'ltc-mweb', dict(BASE, algo='scrypt', symbol='TLTC', segw
 write_case('fixtures', 'evr-devfund', dict(BASE, algo='evrprogpow', symbol='TEVR'),
            {'getblocktemplate': gbt(ntx=2, coinbasetxn={'minerdevfund': {
                'addresses': ['eHNUGzw8ZG9PGC8gKtnneyMaQXQTtAUm98'], 'minimumvalue': 31250000}})})
+# telestai v3: community output outside coinbasevalue
+write_case('fixtures', 'meraki-community', dict(BASE, algo='meraki', symbol='TTLS'),
+           {'getblocktemplate': gbt(ntx=2, CommunityAutonomousAddress='TesBmcgLQsowvYEYPXpSHkkapoTbVV7Xfe',
+                                    CommunityAutonomousValue=11700000000)})
 
 # ---- overflow inputs -------------------------------------------------------
 # 200 payees: coinb2[8K]

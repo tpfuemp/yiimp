@@ -289,7 +289,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		// Kiiro Core requires explicit segwit rule support in the GBT request.
 		sprintf(params, "[{\"mode\":\"template\",\"rules\":[\"segwit\"]},\"%s\"]", coind->wallet);
 	}
-	else if (is_kawpow || is_phihash || is_meowpow || is_evrprogpow) {
+	else if (is_kawpow || is_phihash || is_meowpow || is_evrprogpow || is_meraki) {
 		sprintf(params, "[]");
 	}
 	else {
@@ -658,7 +658,14 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	string merkleroot = merkle_with_first(templ->txsteps, doublehash);
 	strcpy(templ->merkleroot, merkleroot.c_str());
 
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
+	if (is_meraki)
+	{
+		// own 27500-block epoch and seed constant: not the kawpow context
+		meraki_update_epoch(coind->id, templ->height);
+		templ->header_seed = meraki_epoch_seed(templ->height);
+		templ->header_hash = build_header_hash(templ);
+	}
+	else if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
 	{
 		update_epoch(coind->id, templ->height);
 		templ->header_seed = get_kawpow_seed(templ->height);
@@ -752,6 +759,12 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 		uint8_t target_be[32];
 		if (ethash_parse_hex_target(templ->eth_target, target_be))
 			ethash_target_to_diff(target_be, &coind->difficulty);
+	}
+	else if (is_meraki)
+	{
+		uint256 coin_target;
+		decode_nbits(coin_target, (uint32_t)strtoul(templ->nbits, NULL, 16));
+		coind->difficulty = meraki_target_to_diff(coin_target);
 	}
 	else
 	{

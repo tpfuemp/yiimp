@@ -154,7 +154,7 @@ static void job_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char *buffer
 		ethash_ethproxy_work_buffer(job, client, buffer);
 	else if (is_ethash || is_etchash)
 		ethash_job_mining_notify_buffer(job, client, buffer, gen);
-	else if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
+	else if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow || is_meraki)
 		kawpow_job_mining_notify_buffer(job, client, buffer, gen);
 	else
 		job_mining_notify_buffer(job, buffer, gen);

@@ -226,7 +226,7 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 
 	char script1[4*1024];
 	char script2[32];
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
+	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow || is_meraki)
 	{
 		// coinbase v_in only current height
 		sprintf(script1, "%s", eheight);
@@ -823,6 +823,49 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
         }
         if (devfund)
             debuglog("[%s] minerdevfund without usable address/amount, not added\n", coind->symbol);
+    }
+
+    if (is_meraki)
+    {
+        // Telestai: the community output. v3 GBT gives it as
+        // CommunityAutonomousAddress/Value outside coinbasevalue; 2.1.x gave a
+        // "founder" object whose amount is part of coinbasevalue.
+        const char *dev_address = json_get_string(json_result, "CommunityAutonomousAddress");
+        json_int_t dev_amount = json_get_int(json_result, "CommunityAutonomousValue");
+        bool dev_in_value = false;
+
+        if (!dev_address || !*dev_address) {
+            json_value *founder = json_get_object(json_result, "founder");
+            if (founder) {
+                dev_address = json_get_string(founder, "payee");
+                dev_amount = json_get_int(founder, "amount");
+                dev_in_value = true;
+            }
+        }
+
+        char dev_hash160[64] = { 0 };
+        json_int_t miner_amount = available - (dev_in_value ? dev_amount : 0);
+        if (!dev_address || !*dev_address || dev_amount <= 0 || miner_amount <= 0
+            || !base58_decode(dev_address, dev_hash160) || !*dev_hash160) {
+            stratumlog("[%s] GBT without a usable community output (address %s, amount %lld)\n",
+                coind->symbol, dev_address ? dev_address : "-", (long long)dev_amount);
+            return;
+        }
+
+        char dev_script[128] = { 0 };
+        snprintf(dev_script, sizeof(dev_script), "76a914%s88ac", dev_hash160);
+
+        char outputs_count[4] = { 0 };
+        sprintf(outputs_count, "%02x", 2 + (templ->has_segwit_txs ? 1 : 0));
+        STRADD(templ->coinb2, outputs_count);
+
+        job_pack_tx(coind, templ->coinb2, miner_amount, NULL);
+        script_pack_tx(coind, templ->coinb2, dev_amount, dev_script);
+        if (templ->has_segwit_txs) STRADD(templ->coinb2, commitment);
+        STRADD(templ->coinb2, "00000000"); // locktime
+
+        coind->reward = (double)miner_amount / 100000000 * coind->reward_mul;
+        return;
     }
 
     if(!strcmp(coind->symbol, "CLORE")||!strcmp(coind->symbol, "CMS")||!strcmp(coind->symbol, "MEWC")||!strcmp(coind->symbol, "PHI"))

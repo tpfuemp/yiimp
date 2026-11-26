@@ -509,6 +509,9 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 	if (is_ethash || is_etchash)
 		return ethash_submit(client, json_params);
 
+	if (is_meraki)
+		return meraki_submit(client, json_params);
+
 	// simple backport, will need some rework
 	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow) {
 		return kawpow_submit(client, json_params);

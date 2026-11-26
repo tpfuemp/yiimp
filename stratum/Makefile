@@ -20,6 +20,9 @@ SOURCES_KAWPOW=kawpow/lib/keccak/keccak.c kawpow/lib/keccak/keccakf800.c kawpow/
 	phihash/lib/progpow.cpp phihash/hash.cpp \
 	meowpow/lib/progpow.cpp meowpow/hash.cpp \
 	evrprogpow/lib/progpow.cpp evrprogpow/hash.cpp
+SOURCES_MERAKI_C=meraki/lib/keccak/keccak.c meraki/lib/keccak/keccakf800.c meraki/lib/keccak/keccakf1600.c meraki/lib/meraki/primes.c
+SOURCES_MERAKI_CPP=meraki/lib/meraki/meraki.cpp meraki/lib/meraki/managed.cpp meraki/lib/meraki/progpow.cpp meraki/hash.cpp meraki/meraki.cpp
+SOURCES_MERAKI=$(SOURCES_MERAKI_C) $(SOURCES_MERAKI_CPP)
 SOURCES_ETHASH=ethash/params.cpp ethash/context.cpp ethash/work.cpp
 
 CFLAGS += -DHAVE_CURL
@@ -29,7 +32,7 @@ SOURCES += rpc_curl.cpp
 #LDCURL = $(shell /usr/bin/pkg-config --static --libs libcurl)
 #LDFLAGS += $(LDCURL)
 
-OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_ETHASH:.cpp=.o)
+OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_MERAKI_C:.c=.o) $(SOURCES_MERAKI_CPP:.cpp=.o) $(SOURCES_ETHASH:.cpp=.o)
 OUTPUT=stratum
 
 CODEDIR1=algos
@@ -40,8 +43,8 @@ CODEDIR4=secp256k1
 
 .PHONY: projectcode1 projectcode2 projectcode3 projectcode4
 
-all: gitsubmodules projectcode1 projectcode2 projectcode3 projectcode4 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_ETHASH) $(OUTPUT)
-buildonly: projectcode1 projectcode2 projectcode3 projectcode4 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_ETHASH) $(OUTPUT)
+all: gitsubmodules projectcode1 projectcode2 projectcode3 projectcode4 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(OUTPUT)
+buildonly: projectcode1 projectcode2 projectcode3 projectcode4 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(OUTPUT)
 
 gitsubmodules:
 	git submodule init && git submodule update
@@ -60,6 +63,7 @@ ifeq ($(wildcard $(CODEDIR4)/.libs/libsecp256k1.a), )
 endif
 
 $(SOURCES): stratum.h util.h
+$(SOURCES_MERAKI): stratum.h meraki/hash.h meraki/helpers.hpp meraki/meraki.h meraki/lib/meraki/meraki.hpp meraki/lib/meraki/progpow.hpp
 $(SOURCES_ETHASH): stratum.h ethash/params.h ethash/context.h ethash/work.h
 
 $(OUTPUT): $(OBJECTS)
@@ -103,6 +107,7 @@ clean:
 	rm -f firopow/*.o
 	rm -f firopow/lib/*.o
 	rm -f ethash/*.o
+	rm -f meraki/*.o meraki/lib/meraki/*.o meraki/lib/keccak/*.o
 	
 install: clean all
 	strip -s stratum

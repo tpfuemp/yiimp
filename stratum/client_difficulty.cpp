@@ -243,6 +243,13 @@ int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 		// a JSON number: Rigel does not parse a quoted value
 		client_call(client, "mining.set_difficulty", "[%.8g]", difficulty);
 	}
+	else if (is_meraki)
+	{
+		// Telestai diff 1 = 00000000ff00..., not the kawpow scale
+		client->share_target = meraki_diff_to_target(difficulty);
+		client_call(client, "mining.set_target", "[\"%s\"]", client->share_target.ToString().c_str());
+		client->next_target = client->share_target;
+	}
 	else if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
 	{
 		uint256 share_target;
@@ -306,7 +313,7 @@ void client_initialize_difficulty(YAAMP_CLIENT *client)
 	else value = client_password_param(client->password, "sd", 2);
 	if(!value) return;
 
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
+	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow || is_meraki)
 	{
 		client->difficulty_actual = g_stratum_difficulty;
 		diff_to_target(client->share_target, client->difficulty_actual);

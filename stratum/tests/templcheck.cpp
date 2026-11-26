@@ -121,6 +121,7 @@ int main(int argc, char **argv)
 	is_phihash = !strcmp(g_current_algo->name, "phihash");
 	is_meowpow = !strcmp(g_current_algo->name, "meowpow");
 	is_evrprogpow = !strcmp(g_current_algo->name, "evrprogpow");
+	is_meraki = !strcmp(g_current_algo->name, "meraki");
 	coind->pos = !strcasecmp(coind->rpcencoding, "POS");
 
 	str_overflows = 0;
