@@ -289,6 +289,10 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		// Kiiro Core requires explicit segwit rule support in the GBT request.
 		sprintf(params, "[{\"mode\":\"template\",\"rules\":[\"segwit\"]},\"%s\"]", coind->wallet);
 	}
+	else if (is_randomscash) {
+		// Scash Core rejects template requests without the segwit rule
+		strcpy(params, "[{\"rules\":[\"segwit\"]}]");
+	}
 	else if (is_homescrypt) {
 		// Lumenite Core v1.2 wants both rule sets
 		strcpy(params, "[{\"rules\":[\"segwit\",\"mweb\"]}]");
@@ -409,6 +413,14 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 
 	const char *bits = str_fits(json_get_string(json_result, "bits"), sizeof(templ->nbits), "templ->nbits");
 	strcpy(templ->nbits, bits ? bits : "");
+	// Scash: RandomX key from ntime / rx_epoch_duration (mainnet one week)
+	templ->rx_epoch_duration = 604800;
+	if (is_randomscash) {
+		json_int_t rx_epoch_duration = json_get_int(json_result, "rx_epoch_duration");
+		if (rx_epoch_duration > 0)
+			templ->rx_epoch_duration = (uint64_t)rx_epoch_duration;
+	}
+
 	const char *prev = json_get_string(json_result, "previousblockhash");
 	STRSET(templ->prevhash_hex, prev ? prev : "");
 	const char *flags = json_get_string(json_coinbaseaux, "flags");

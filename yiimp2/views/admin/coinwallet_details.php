@@ -37,7 +37,9 @@ if (!empty($info)) {
     $stake = $conv->arraySafeVal($info, 'stake', '');
     if ($stake !== '') $PoS = true;
 }
-$rpcAvailable = !empty($info) && isset($info['balance']);
+// a daemon without a loaded wallet (Bitcoin Core 30+, Scash) still answers
+// with blocks: RPC is online, the balance comes from the pool DB
+$rpcAvailable = !empty($info) && (isset($info['balance']) || isset($info['blocks']));
 
 // DCR stake info
 $dcrStake = $dcrTickets = $dcrTicketPrice = null;
@@ -393,7 +395,7 @@ if (!$rpcAvailable) {
     echo "<td class='{$tdR}'>" . Html::encode((string) $index) . "</td>";
 } else {
     $errors  = $info['errors'] ?? '';
-    $balance = $info['balance'] ?? '';
+    $balance = $info['balance'] ?? $coin->balance;
     $btc     = $conv->bitcoinvaluetoa($balance * $coin->price);
     $conns   = isset($info['connections'])
         ? Html::a(Html::encode((string) $info['connections']), '/admin/coinpeers?id=' . $coin->id)

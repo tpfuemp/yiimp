@@ -31,6 +31,12 @@ struct YAAMP_JOB_VALUES
 	char hash_hex[1024];
 	char hash_be[1024];
 	unsigned char hash_bin[1024];
+
+	// Scash: block hash (SHA256d of the 112-byte header); hash_* holds the
+	// RandomX commitment the difficulty is checked against
+	char block_hash_hex[1024];
+	char block_hash_be[1024];
+	unsigned char block_hash_bin[1024];
 };
 
 struct YAAMP_JOB_TEMPLATE
@@ -100,6 +106,9 @@ struct YAAMP_JOB_TEMPLATE
 	uint256 header_hash;
 	uint256 header_seed;
 	//////////////////////////////////////////////////
+
+	// Scash RandomX epoch length from getblocktemplate (seconds)
+	uint64_t rx_epoch_duration;
 
 	// ethash / etchash work from eth_getWork (0x-prefixed big endian hashes)
 	char eth_header[80];
@@ -176,8 +185,9 @@ void job_send_last(YAAMP_CLIENT *client);
 void job_resend(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen);
 void job_notify_id(char *out, YAAMP_JOB *job, int gen);
 
-// header and coinbase for a submit; compute_hash false skips the PoW hash
-void build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *templ,
+// header and coinbase for a submit; compute_hash false skips the PoW hash;
+// false if the PoW can't be computed (RandomX)
+bool build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *templ,
 	const char *nonce1, const char *nonce2, const char *ntime, const char *nonce,
 	uint32_t versionbits, bool compute_hash = true);
 void job_broadcast(YAAMP_JOB *job);

@@ -172,6 +172,10 @@ function BackendCoinsUpdate()
         if ($coin->algo == 'firopow' || $coin->symbol == 'KIIRO') {
             $template = $remote->getblocktemplate('{"mode":"template","rules":["segwit"]},' . json_encode((string) $coin->master_wallet));
         }
+        // Scash Core requires the segwit rule; the pool verifies RandomX itself
+        else if ($coin->algo == 'randomscash') {
+            $template = $remote->getblocktemplate('{"rules":["segwit"]}');
+        }
         // Lumenite Core v1.2 requires both rule sets
         else if ($coin->algo == 'homescrypt') {
             $template = $remote->getblocktemplate('{"rules":["segwit","mweb"]}');

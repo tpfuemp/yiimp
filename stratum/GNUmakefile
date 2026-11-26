@@ -95,6 +95,7 @@ LIBALGOS  := $(B)/libalgos.a
 LIBHASH   := $(B)/libhash.a
 LIBINI    := $(B)/libiniparser.a
 SECP256K1 := secp256k1/.libs/libsecp256k1.a
+RANDOMX   := randomx/librandomx.a
 
 # Makefile's LDLIBS in its order (duplicate symbols resolve by link order),
 # our archives in place of its in-tree ones. A library that only Makefile
@@ -129,6 +130,12 @@ $(LIBINI): $(INI_OBJS)
 $(LIBALGOS) $(LIBHASH) $(LIBINI):
 	$(call msg,AR,$@)
 	$(Q)rm -f $@ && $(AR) rcs $@ $^
+
+# generic RandomX build: the library picks AES/JIT at runtime
+$(RANDOMX):
+	mkdir -p randomx/build && cd randomx/build && cmake -DCMAKE_BUILD_TYPE=Release -DARCH=default \
+		-DCMAKE_CXX_FLAGS="-include cstdint" .. >/dev/null && $(MAKE) --no-print-directory randomx
+	cp randomx/build/librandomx.a $@
 
 $(SECP256K1):
 	cd secp256k1 && chmod +x autogen.sh && ./autogen.sh && ./configure --enable-experimental \
@@ -166,7 +173,7 @@ install:
 	cp stratum ../bin/
 
 clean:
-	rm -rf build stratum
+	rm -rf build stratum randomx/build $(RANDOMX)
 
 print-%:
 	@echo $($*)

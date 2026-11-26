@@ -105,6 +105,7 @@ bool is_meowpow = false;
 bool is_evrprogpow = false;
 bool is_meraki = false;
 bool is_homescrypt = false;
+bool is_randomscash = false;
 bool is_ethash = false;
 bool is_etchash = false;
 
@@ -241,6 +242,8 @@ YAAMP_ALGO g_algos[] =
 	{"quark", quark_hash, 1, 0, 0},
 	{"qubit", qubit_hash, 1, 0, 0},
 	{"rainforest", rainforest_hash, 0x100, 0, 0},
+	// cpuminer-scash targets diff/65536 (MiningCore shareMultiplier too)
+	{"randomscash", sha256_double_hash, 0x10000, 0, 0},
 	{"renesis", renesis_hash, 1, 0, 0},
 	{"rinhash", rinhash_hash, 1, 0, 0},
 	{"scrypt", scrypt_hash, 0x10000, 0, 0},
@@ -478,6 +481,10 @@ int main(int argc, char **argv)
 	else if (!strcmp(g_current_algo->name,"homescrypt"))
 	{
 		is_homescrypt = true;
+	}
+	else if (!strcmp(g_current_algo->name,"randomscash"))
+	{
+		is_randomscash = true;
 	}
 	else if (!strcmp(g_current_algo->name,"ethash"))
 	{

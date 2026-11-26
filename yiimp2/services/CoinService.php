@@ -439,6 +439,10 @@ class CoinService
             $wallet = json_encode((string) $coin->master_wallet, JSON_UNESCAPED_SLASHES);
             return $remote->getblocktemplate('{"mode":"template","rules":["segwit"]},' . $wallet);
         }
+        // Scash Core requires the segwit rule in GBT requests.
+        if ($coin->algo === 'randomscash') {
+            return $remote->getblocktemplate('{"rules":["segwit"]}');
+        }
         // Lumenite Core v1.2 requires both rule sets even though segwit is
         // active from height 1 and no mweb template fields are currently sent.
         if ($coin->algo === 'homescrypt') {

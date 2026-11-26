@@ -79,6 +79,7 @@ extern bool is_meowpow;
 extern bool is_evrprogpow;
 extern bool is_meraki;
 extern bool is_homescrypt;
+extern bool is_randomscash;
 extern bool is_ethash;
 extern bool is_etchash;
 

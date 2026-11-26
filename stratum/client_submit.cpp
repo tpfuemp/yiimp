@@ -1,5 +1,6 @@
 
 #include "stratum.h"
+#include "randomscash/randomscash.h"
 
 uint64_t lyra2z_height = 0;
 
@@ -29,7 +30,7 @@ static bool homescrypt_full_hash_le(const unsigned char *hash_bin, const arith_u
 //#define MERKLE_DEBUGLOG
 //#define DONTSUBMIT
 
-void build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *templ,
+bool build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *templ,
 	const char *nonce1, const char *nonce2, const char *ntime, const char *nonce, uint32_t versionbits, bool compute_hash)
 {
 	STRFMT(submitvalues->coinbase, "%s%s%s%s", templ->coinb1, nonce1, nonce2, templ->coinb2);
@@ -63,6 +64,41 @@ void build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *tem
 #ifdef MERKLE_DEBUGLOG
 	printf("merkle root %s\n", merkleroot.c_str());
 #endif
+
+	if (is_randomscash)
+	{
+		// Scash: 112-byte header ending in hashRandomX, zero while R = RandomX(header)
+		// and the commitment CM = Blake2b(header || R) are derived. CM is the mined
+		// value (difficulty), the block carries R and is identified by SHA256d.
+		snprintf(submitvalues->header, sizeof(submitvalues->header), "%s%s%s%s%s%s%064d", templ->version,
+			templ->prevhash_be, submitvalues->merkleroot_be, ntime, templ->nbits, nonce, 0);
+		ser_string_be(submitvalues->header, submitvalues->header_be, 112/4);
+		binlify(submitvalues->header_bin, submitvalues->header_be);
+		if (!compute_hash) return true;
+
+		unsigned char rx_hash[32], commitment[32];
+		uint64_t epoch_duration = templ->rx_epoch_duration ? templ->rx_epoch_duration : 604800;
+		if (!randomscash_calculate(submitvalues->header_bin, strtoul(ntime, NULL, 16), epoch_duration, rx_hash, commitment))
+		{
+			debuglog("randomscash: RandomX verification unavailable\n");
+			return false;
+		}
+
+		memcpy(submitvalues->hash_bin, commitment, 32);
+		hexlify(submitvalues->hash_hex, submitvalues->hash_bin, 32);
+		string_be(submitvalues->hash_hex, submitvalues->hash_be);
+
+		char rx_hash_hex[65] = { 0 };
+		hexlify(rx_hash_hex, rx_hash, 32);
+		memcpy(submitvalues->header_be + 160, rx_hash_hex, 64);
+		binlify(submitvalues->header_bin, submitvalues->header_be);
+
+		sha256_double_hash((char *)submitvalues->header_bin, (char *)submitvalues->block_hash_bin, 112);
+		hexlify(submitvalues->block_hash_hex, submitvalues->block_hash_bin, 32);
+		string_be(submitvalues->block_hash_hex, submitvalues->block_hash_be);
+		return true;
+	}
+
 	if (!strcmp(g_stratum_algo, "lbry")) {
 		sprintf(submitvalues->header, "%s%s%s%s%s%s%s", templ->version, templ->prevhash_be, submitvalues->merkleroot_be,
 			templ->claim_be, ntime, templ->nbits, nonce);
@@ -99,7 +135,7 @@ void build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *tem
 	}
 
 	binlify(submitvalues->header_bin, submitvalues->header_be);
-	if (!compute_hash) return;
+	if (!compute_hash) return true;
 
 //	printf("%s\n", submitvalues->header_be);
 	int header_len = strlen(submitvalues->header)/2;
@@ -107,6 +143,7 @@ void build_submit_values(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *tem
 
 	hexlify(submitvalues->hash_hex, submitvalues->hash_bin, 32);
 	string_be(submitvalues->hash_hex, submitvalues->hash_be);
+	return true;
 }
 
 void build_submit_values_equihash(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *templ,
@@ -471,24 +508,26 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 				strcpy(hash1, submitvalues->hash_hex);
 			}
 
+			const char *block_hash = is_randomscash ? submitvalues->block_hash_be : submitvalues->hash_be;
+
 			block_add(client->userid, client->workerid, coind->id, templ->height,
 				target_to_diff_coin(coin_target, coind->powlimit_bits - ((is_equihash)? 0 : 16)),
 				target_to_diff_coin(hash_int, coind->powlimit_bits - ((is_equihash)? 0 : 16)),
-				hash1, submitvalues->hash_be, templ->has_segwit_txs, client->solo);
+				hash1, block_hash, templ->has_segwit_txs, client->solo);
 
 			if(!strcmp("DCR", coind->rpcencoding)) {
 				// delay between dcrd and dcrwallet
 				sleep(1);
 			}
 
-			if(!strcmp(coind->lastnotifyhash,submitvalues->hash_be)) {
-				block_confirm(coind->id, submitvalues->hash_be);
+			if(!strcmp(coind->lastnotifyhash, block_hash)) {
+				block_confirm(coind->id, block_hash);
 			}
 
 			if (g_debuglog_hash) {
 				debuglog("--------------------------------------------------------------\n");
 				debuglog("hash1 %s\n", hash1);
-				debuglog("hash2 %s\n", submitvalues->hash_be);
+				debuglog("hash2 %s\n", block_hash);
 			}
 		}
 
@@ -669,6 +708,13 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 			client_submit_error(client, job, 23, "Invalid ntime (rolling not allowed)", extranonce2, ntime, nonce);
 			return true;
 		}
+		// Scash: ntime picks the RandomX key; another epoch than the job's would
+		// rebuild the 256 MB cache under the verifier lock
+		uint64_t rx_epoch = templ->rx_epoch_duration ? templ->rx_epoch_duration : 604800;
+		if (is_randomscash && strtoul(ntime, NULL, 16) / rx_epoch != strtoul(templ->ntime, NULL, 16) / rx_epoch) {
+			client_submit_error(client, job, 23, "Invalid ntime (RandomX epoch)", extranonce2, ntime, nonce);
+			return true;
+		}
 	}
 
 	YAAMP_SHARE *share = share_find(job->id, extranonce2, ntime, nonce, client->extranonce1);
@@ -721,8 +767,9 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 		build_submit_values_decred(&submitvalues, templ, client->extranonce1, extranonce2, ntime, nonce, vote, true);
 	else if (is_equihash)
 		build_submit_values_equihash(&submitvalues, templ, client->extranonce1, ntime, nonce, equihash_solution);
-	else {
-		build_submit_values(&submitvalues, templ, client->extranonce1, extranonce2, ntime, nonce, versionmask);
+	else if (!build_submit_values(&submitvalues, templ, client->extranonce1, extranonce2, ntime, nonce, versionmask)) {
+		client_submit_error(client, job, 20, "RandomX verification error", extranonce2, ntime, nonce);
+		return true;
 	}
 
 	if (templ->height && !strcmp(g_current_algo->name,"lyra2z")) {

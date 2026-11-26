@@ -1,13 +1,13 @@
 
 CC= gcc -no-pie 
 
-CFLAGS= -g -march=native -I./
+CFLAGS= -g -march=native -I./ -Irandomx/src
 SQLFLAGS= `mysql_config --cflags --libs`
 
 #CFLAGS=-c -O2 -I /usr/include/mysql
 #LDFLAGS=-O2 `mysql_config --libs`
 
-LDLIBS=iniparser/libiniparser.a algos/libalgos.a sha3/libhash.a -Isecp256k1/include secp256k1/.libs/libsecp256k1.a -lpthread -lgmp -lm -lstdc++ -lssl -lcrypto -lsodium
+LDLIBS=randomx/librandomx.a iniparser/libiniparser.a algos/libalgos.a sha3/libhash.a -Isecp256k1/include secp256k1/.libs/libsecp256k1.a -lpthread -lgmp -lm -lstdc++ -lssl -lcrypto -lsodium
 LDLIBS+=-lmysqlclient -lcurl
 
 SOURCES=stratum.cpp db.cpp coind.cpp coind_aux.cpp coind_template.cpp coind_submit.cpp util.cpp list.cpp uint256.cpp arith_uint256.cpp utilstrencodings.cpp \
@@ -24,6 +24,7 @@ SOURCES_MERAKI_C=meraki/lib/keccak/keccak.c meraki/lib/keccak/keccakf800.c merak
 SOURCES_MERAKI_CPP=meraki/lib/meraki/meraki.cpp meraki/lib/meraki/managed.cpp meraki/lib/meraki/progpow.cpp meraki/hash.cpp meraki/meraki.cpp
 SOURCES_MERAKI=$(SOURCES_MERAKI_C) $(SOURCES_MERAKI_CPP)
 SOURCES_HOMESCRYPT=homescrypt/homescrypt.cpp
+SOURCES_RANDOMSCASH=randomscash/randomscash.cpp
 SOURCES_ETHASH=ethash/params.cpp ethash/context.cpp ethash/work.cpp
 
 CFLAGS += -DHAVE_CURL
@@ -33,19 +34,20 @@ SOURCES += rpc_curl.cpp
 #LDCURL = $(shell /usr/bin/pkg-config --static --libs libcurl)
 #LDFLAGS += $(LDCURL)
 
-OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_MERAKI_C:.c=.o) $(SOURCES_MERAKI_CPP:.cpp=.o) $(SOURCES_ETHASH:.cpp=.o) $(SOURCES_HOMESCRYPT:.cpp=.o)
+OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_MERAKI_C:.c=.o) $(SOURCES_MERAKI_CPP:.cpp=.o) $(SOURCES_ETHASH:.cpp=.o) $(SOURCES_HOMESCRYPT:.cpp=.o) $(SOURCES_RANDOMSCASH:.cpp=.o)
 OUTPUT=stratum
 
 CODEDIR1=algos
 CODEDIR2=sha3
 CODEDIR3=iniparser
 CODEDIR4=secp256k1
+CODEDIR5=randomx
 
 
-.PHONY: projectcode1 projectcode2 projectcode3 projectcode4
+.PHONY: projectcode1 projectcode2 projectcode3 projectcode4 projectcode5
 
-all: gitsubmodules projectcode1 projectcode2 projectcode3 projectcode4 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(OUTPUT)
-buildonly: projectcode1 projectcode2 projectcode3 projectcode4 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(OUTPUT)
+all: gitsubmodules projectcode1 projectcode2 projectcode3 projectcode4 projectcode5 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(SOURCES_RANDOMSCASH) $(OUTPUT)
+buildonly: projectcode1 projectcode2 projectcode3 projectcode4 projectcode5 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(SOURCES_RANDOMSCASH) $(OUTPUT)
 
 gitsubmodules:
 	git submodule init && git submodule update
@@ -63,9 +65,18 @@ ifeq ($(wildcard $(CODEDIR4)/.libs/libsecp256k1.a), )
 	cd $(CODEDIR4) && chmod +x autogen.sh && ./autogen.sh && ./configure --enable-experimental --enable-module-ecdh --with-bignum=no --enable-endomorphism && $(MAKE)
 endif
 
+# RandomX for Scash, generic build (CPU features are picked at runtime)
+projectcode5:
+ifeq ($(wildcard $(CODEDIR5)/librandomx.a), )
+	mkdir -p $(CODEDIR5)/build
+	cd $(CODEDIR5)/build && cmake -DCMAKE_BUILD_TYPE=Release -DARCH=default -DCMAKE_CXX_FLAGS="-include cstdint" .. && $(MAKE)
+	cp $(CODEDIR5)/build/librandomx.a $(CODEDIR5)/librandomx.a
+endif
+
 $(SOURCES): stratum.h util.h
 $(SOURCES_MERAKI): stratum.h meraki/hash.h meraki/helpers.hpp meraki/meraki.h meraki/lib/meraki/meraki.hpp meraki/lib/meraki/progpow.hpp
 $(SOURCES_HOMESCRYPT): stratum.h homescrypt/homescrypt.h
+$(SOURCES_RANDOMSCASH): stratum.h randomscash/randomscash.h randomx/src/randomx.h
 $(SOURCES_ETHASH): stratum.h ethash/params.h ethash/context.h ethash/work.h
 
 # HomeScrypt v1.2 consensus needs exact IEEE-754 fmaf rounding: no FMA
@@ -115,6 +126,8 @@ clean:
 	rm -f firopow/lib/*.o
 	rm -f ethash/*.o
 	rm -f homescrypt/*.o
+	rm -f randomscash/*.o
+	rm -rf randomx/build randomx/librandomx.a
 	rm -f meraki/*.o meraki/lib/meraki/*.o meraki/lib/keccak/*.o
 	
 install: clean all
