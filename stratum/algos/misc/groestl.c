@@ -5,8 +5,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../sha3/sph_groestl.h"
-#include "sha256.h"
+#include "third_party/sph/sph_groestl.h"
+#include "algos/sha2/sha256.h"
 
 void groestl_hash(const char* input, char* output, uint32_t len)
 {

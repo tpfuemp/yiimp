@@ -3,14 +3,14 @@
 #include <string.h>
 #include <stdio.h>
 
-#include <sha3/sph_skein.h>
-#include <sha3/sph_shabal.h>
-#include <sha3/sph_echo.h>
-#include <sha3/sph_luffa.h>
-#include <sha3/sph_fugue.h>
-#include "gost.h"
+#include <third_party/sph/sph_skein.h>
+#include <third_party/sph/sph_shabal.h>
+#include <third_party/sph/sph_echo.h>
+#include <third_party/sph/sph_luffa.h>
+#include <third_party/sph/sph_fugue.h>
+#include "algos/misc/gost.h"
 
-#include "common.h"
+#include "algos/common/common.h"
 
 void polytimos_hash(const char *input, char* output, uint32_t len)
 {

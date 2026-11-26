@@ -4,8 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../sha3/sph_types.h"
-#include "../sha3/sph_keccak.h"
+#include "third_party/sph/sph_types.h"
+#include "third_party/sph/sph_keccak.h"
 
 void keccak256_hash(const char *input, char *output, uint32_t len)
 {

@@ -3,8 +3,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../sha3/sph_sha2.h"
-#include "../sha3/sph_ripemd.h"
+#include "third_party/sph/sph_sha2.h"
+#include "third_party/sph/sph_ripemd.h"
 
 //#define DEBUG
 

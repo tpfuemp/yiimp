@@ -3,16 +3,16 @@
 #include <string.h>
 #include <stdio.h>
 
-#include <sha3/sph_bmw.h>
-#include <sha3/sph_jh.h>
-#include <sha3/sph_keccak.h>
-#include <sha3/sph_skein.h>
-#include <sha3/sph_cubehash.h>
-#include <sha3/sph_echo.h>
-#include <sha3/sph_fugue.h>
-#include "gost.h"
+#include <third_party/sph/sph_bmw.h>
+#include <third_party/sph/sph_jh.h>
+#include <third_party/sph/sph_keccak.h>
+#include <third_party/sph/sph_skein.h>
+#include <third_party/sph/sph_cubehash.h>
+#include <third_party/sph/sph_echo.h>
+#include <third_party/sph/sph_fugue.h>
+#include "algos/misc/gost.h"
 
-#include "common.h"
+#include "algos/common/common.h"
 
 void phi5_hash(const char* input, char* output, uint32_t len)
 {

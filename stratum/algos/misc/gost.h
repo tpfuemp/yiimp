@@ -41,7 +41,7 @@ extern "C"{
 #endif
 
 #include <stddef.h>
-#include "../sha3/sph_types.h"
+#include "third_party/sph/sph_types.h"
 
 /**
  * Output size (in bits) for GOST-256.

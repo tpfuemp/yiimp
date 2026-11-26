@@ -4,7 +4,7 @@
 #include <string.h>
 #include <openssl/aes.h>
 #include <openssl/evp.h>
-#include "sha256.h"
+#include "algos/sha2/sha256.h"
 #include "balloon.h"
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))

@@ -5,8 +5,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../sha3/sph_skein.h"
-#include "sha256.h"
+#include "third_party/sph/sph_skein.h"
+#include "algos/sha2/sha256.h"
 
 #include <stdlib.h>
 

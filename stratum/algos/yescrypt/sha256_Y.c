@@ -29,7 +29,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "sysendian.h"
+#include "algos/common/sysendian.h"
 
 #include "sha256_Y.h"
 

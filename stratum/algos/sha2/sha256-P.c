@@ -29,8 +29,8 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "yespower/insecure_memzero.h"
-#include "sysendian_yp.h"
+#include "algos/yespower/insecure_memzero.h"
+#include "algos/common/sysendian_yp.h"
 
 #include "sha256-P.h"
 

@@ -1,9 +1,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <sha3/sph_luffa.h>
-#include <sha3/sph_cubehash.h>
-#include <sha3/sph_echo.h>
+#include <third_party/sph/sph_luffa.h>
+#include <third_party/sph/sph_cubehash.h>
+#include <third_party/sph/sph_echo.h>
 
 void deep_hash(const char* input, char* output, uint32_t len)
 {

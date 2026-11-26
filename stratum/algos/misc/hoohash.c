@@ -7,7 +7,7 @@
 // Adapted from https://github.com/HoosatNetwork/hoohash/ commit 9634f11410a2d71be21086e813263fa007fb6810
 
 #include "hoohash.h"
-#include "blake3/blake3.h"
+#include "third_party/blake3/blake3.h"
 #include <string.h>
 #include <math.h>
 

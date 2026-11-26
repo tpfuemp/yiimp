@@ -5,12 +5,12 @@
 #include <string.h>
 #include <stdint.h>
 
-#include "sha3/sph_blake.h"
-#include "sha3/sph_cubehash.h"
-#include "sha3/sph_shavite.h"
-#include "sha3/sph_simd.h"
-#include "sha3/sph_echo.h"
-#include "sha3/sph_sha2.h"
+#include "third_party/sph/sph_blake.h"
+#include "third_party/sph/sph_cubehash.h"
+#include "third_party/sph/sph_shavite.h"
+#include "third_party/sph/sph_simd.h"
+#include "third_party/sph/sph_echo.h"
+#include "third_party/sph/sph_sha2.h"
 
 void meme_hash(const char* input, char* output, uint32_t len)
 {

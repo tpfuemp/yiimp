@@ -1,6 +1,6 @@
 
 CC=gcc
-include ../arch.mk
+include ../../arch.mk
 
 CFLAGS= -O3 -march=$(ARCH) -fno-strict-aliasing -fwrapv
 LDFLAGS=-O2

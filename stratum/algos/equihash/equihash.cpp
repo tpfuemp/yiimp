@@ -10,7 +10,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "sha256.h"
+#include "algos/sha2/sha256.h"
 
 #include "equihash.h" // equi_verify()
 
@@ -33,7 +33,7 @@
 #include "sodium.h"
 #define blake2b_state crypto_generichash_blake2b_state
 #else
-#include "ar2/blake2/blake2.h"
+#include "algos/argon2/ar2/blake2/blake2.h"
 #define be32toh(x) swab32(x)
 #define htole32(x) (x)
 #define HASHOUT 50

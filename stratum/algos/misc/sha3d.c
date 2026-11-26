@@ -3,8 +3,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../sha3/sph_types.h"
-#include "../sha3/sph_sha3d.h"
+#include "third_party/sph/sph_types.h"
+#include "third_party/sph/sph_sha3d.h"
 
 #define _ALIGN(x) __attribute__ ((aligned(x)))
 

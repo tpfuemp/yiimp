@@ -4,10 +4,10 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../sha3/sph_types.h"
-#include "../sha3/sph_keccak.h"
-#include "../sha3/sph_shabal.h"
-#include "../sha3/sph_blake.h"
+#include "third_party/sph/sph_types.h"
+#include "third_party/sph/sph_keccak.h"
+#include "third_party/sph/sph_shabal.h"
+#include "third_party/sph/sph_blake.h"
 
 #include "pomelo.h"
 

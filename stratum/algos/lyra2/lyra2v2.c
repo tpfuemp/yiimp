@@ -31,11 +31,11 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
-#include "../sha3/sph_blake.h"
-#include "../sha3/sph_cubehash.h"
-#include "../sha3/sph_keccak.h"
-#include "../sha3/sph_skein.h"
-#include "../sha3/sph_bmw.h"
+#include "third_party/sph/sph_blake.h"
+#include "third_party/sph/sph_cubehash.h"
+#include "third_party/sph/sph_keccak.h"
+#include "third_party/sph/sph_skein.h"
+#include "third_party/sph/sph_bmw.h"
 #include "Lyra2.h"
 
 void lyra2v2_hash(const char* input, char* output, uint32_t len)

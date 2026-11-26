@@ -32,7 +32,7 @@
 #include <string.h>
 
 #include "scryptn.h"
-#include "sha256.h"
+#include "algos/sha2/sha256.h"
 
 static void blkcpy(void *, void *, size_t);
 static void blkxor(void *, void *, size_t);

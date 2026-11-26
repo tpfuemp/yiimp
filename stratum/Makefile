@@ -7,7 +7,7 @@ SQLFLAGS= `mysql_config --cflags --libs`
 #CFLAGS=-c -O2 -I /usr/include/mysql
 #LDFLAGS=-O2 `mysql_config --libs`
 
-LDLIBS=randomx/librandomx.a iniparser/libiniparser.a algos/libalgos.a sha3/libhash.a -Isecp256k1/include secp256k1/.libs/libsecp256k1.a -lpthread -lgmp -lm -lstdc++ -lssl -lcrypto -lsodium
+LDLIBS=randomx/librandomx.a iniparser/libiniparser.a algos/libalgos.a third_party/sph/libhash.a -Isecp256k1/include secp256k1/.libs/libsecp256k1.a -lpthread -lgmp -lm -lstdc++ -lssl -lcrypto -lsodium
 LDLIBS+=-lmysqlclient -lcurl
 
 SOURCES=stratum.cpp db.cpp coind.cpp coind_aux.cpp coind_template.cpp coind_submit.cpp util.cpp list.cpp uint256.cpp arith_uint256.cpp utilstrencodings.cpp \
@@ -41,7 +41,7 @@ OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_MERAKI_C:.c=.o) $
 OUTPUT=stratum
 
 CODEDIR1=algos
-CODEDIR2=sha3
+CODEDIR2=third_party/sph
 CODEDIR3=iniparser
 CODEDIR4=secp256k1
 CODEDIR5=randomx
@@ -77,7 +77,7 @@ ifeq ($(wildcard $(CODEDIR5)/librandomx.a), )
 endif
 
 $(SOURCES): stratum.h util.h
-stratum.o: algos/registry.def
+stratum.o: algos/registry.def algos/algos.h
 $(SOURCES_MERAKI): stratum.h meraki/hash.h meraki/helpers.hpp meraki/meraki.h meraki/lib/meraki/meraki.hpp meraki/lib/meraki/progpow.hpp
 $(SOURCES_HOMESCRYPT): stratum.h homescrypt/homescrypt.h
 $(SOURCES_RANDOMSCASH): stratum.h randomscash/randomscash.h randomx/src/randomx.h
@@ -106,20 +106,8 @@ clean:
 	rm -f iniparser/*.o
 	rm -f iniparser/src/*.o
 	rm -f iniparser/*.a
-	rm -f sha3/*.o
-	rm -f sha3/*.a
-	rm -f algos/ar2/*.o
-	rm -f algos/blake2/*.o
-	rm -f algos/blake2-ref/*.o
-	rm -f algos/cryptonote/*.o
-	rm -f algos/cryptonote/crypto/*.o
-	rm -f algos/heavyhash/*.o
-	rm -f algos/honeycomb/*.o
-	rm -f algos/SWIFFTX/*.o
-	rm -f algos/yespower/*.o
-	rm -f algos/yespower/crypto/*.o
-	rm -f algos/blake3/*.o
-	rm -f algos/sha3/*.o
+	rm -f third_party/sph/*.o third_party/sph/*.a
+	find algos third_party/keccak-xkcp third_party/blake2-ref third_party/blake3 third_party/SWIFFTX -name '*.o' -delete
 	rm -f algos/xelisv2-pepew/*.o
 	rm -f kawpow/lib/keccak/*.o
 	rm -f phihash/*.o phihash/lib/*.o

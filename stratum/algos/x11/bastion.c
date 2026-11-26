@@ -3,15 +3,15 @@
 #include <string.h>
 #include <stdio.h>
 
-#include <sha3/sph_hefty1.h>
-#include <sha3/sph_echo.h>
-#include <sha3/sph_fugue.h>
-#include <sha3/sph_whirlpool.h>
-#include <sha3/sph_skein.h>
-#include <sha3/sph_echo.h>
-#include <sha3/sph_luffa.h>
-#include <sha3/sph_hamsi.h>
-#include <sha3/sph_shabal.h>
+#include <third_party/sph/sph_hefty1.h>
+#include <third_party/sph/sph_echo.h>
+#include <third_party/sph/sph_fugue.h>
+#include <third_party/sph/sph_whirlpool.h>
+#include <third_party/sph/sph_skein.h>
+#include <third_party/sph/sph_echo.h>
+#include <third_party/sph/sph_luffa.h>
+#include <third_party/sph/sph_hamsi.h>
+#include <third_party/sph/sph_shabal.h>
 
 #define _ALIGN(x) __attribute__ ((aligned(x)))
 

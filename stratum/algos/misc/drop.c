@@ -9,17 +9,17 @@
 extern "C" {
 #endif
 
-#include "../sha3/sph_blake.h"
-#include "../sha3/sph_groestl.h"
-#include "../sha3/sph_skein.h"
-#include "../sha3/sph_jh.h"
-#include "../sha3/sph_keccak.h"
-#include "../sha3/sph_luffa.h"
-#include "../sha3/sph_cubehash.h"
-#include "../sha3/sph_shavite.h"
-#include "../sha3/sph_simd.h"
-#include "../sha3/sph_echo.h"
-#include "../sha3/sph_fugue.h"
+#include "third_party/sph/sph_blake.h"
+#include "third_party/sph/sph_groestl.h"
+#include "third_party/sph/sph_skein.h"
+#include "third_party/sph/sph_jh.h"
+#include "third_party/sph/sph_keccak.h"
+#include "third_party/sph/sph_luffa.h"
+#include "third_party/sph/sph_cubehash.h"
+#include "third_party/sph/sph_shavite.h"
+#include "third_party/sph/sph_simd.h"
+#include "third_party/sph/sph_echo.h"
+#include "third_party/sph/sph_fugue.h"
 
 //#define TEST_VERBOSELY
 

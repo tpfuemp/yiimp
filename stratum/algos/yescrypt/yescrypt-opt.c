@@ -33,7 +33,7 @@
 #include <stdlib.h>
 
 #include "sha256_Y.h"
-#include "sysendian.h"
+#include "algos/common/sysendian.h"
 
 #include "yescrypt-platform.c"
 

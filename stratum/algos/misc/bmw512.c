@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
-#include "../sha3/sph_bmw.h"
+#include "third_party/sph/sph_bmw.h"
 
  void bmw512_hash(const char* input, char* output, uint32_t len)
 {

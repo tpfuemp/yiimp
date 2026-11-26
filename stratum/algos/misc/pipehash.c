@@ -28,16 +28,16 @@
  * of the authors and should not be interpreted as representing official policies,
  * either expressed or implied, of the FreeBSD Project.
  */
-#include "sha256.h"
+#include "algos/sha2/sha256.h"
 #include <assert.h>
 #include <string.h>
 //#include "sph_blake.h"
 //#include "sph_groestl.h"
-#include <sha3/sph_keccak.h>
-#include <sha3/sph_hefty1.h>
+#include <third_party/sph/sph_keccak.h>
+#include <third_party/sph/sph_hefty1.h>
 #include "pipehash.h"
-#include <sha3/sph_blake.h>
-#include <sha3/sph_groestl.h>
+#include <third_party/sph/sph_blake.h>
+#include <third_party/sph/sph_groestl.h>
 
 
 void shift_left(unsigned char *data, unsigned int shift){

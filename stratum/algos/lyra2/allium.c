@@ -1,10 +1,10 @@
 #include <memory.h>
 
-#include "sha3/sph_blake.h"
-#include "sha3/sph_groestl.h"
-#include "sha3/sph_skein.h"
-#include "sha3/sph_keccak.h"
-#include "sha3/sph_cubehash.h"
+#include "third_party/sph/sph_blake.h"
+#include "third_party/sph/sph_groestl.h"
+#include "third_party/sph/sph_skein.h"
+#include "third_party/sph/sph_keccak.h"
+#include "third_party/sph/sph_cubehash.h"
 
 #include "Lyra2.h"
 

@@ -11,14 +11,14 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../sha3/sph_skein.h"
-#include "../sha3/sph_keccak.h"
-#include "../sha3/sph_simd.h"
-#include "../sha3/sph_shavite.h"
-#include "../sha3/sph_jh.h"
-#include "../sha3/sph_cubehash.h"
-#include "../sha3/sph_fugue.h"
-#include "../sha3/sph_gost.h"
+#include "third_party/sph/sph_skein.h"
+#include "third_party/sph/sph_keccak.h"
+#include "third_party/sph/sph_simd.h"
+#include "third_party/sph/sph_shavite.h"
+#include "third_party/sph/sph_jh.h"
+#include "third_party/sph/sph_cubehash.h"
+#include "third_party/sph/sph_fugue.h"
+#include "third_party/sph/sph_gost.h"
 
 void renesis_hash(const char* input, char* output, uint32_t len)
 {

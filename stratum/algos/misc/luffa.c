@@ -5,7 +5,7 @@
 
 #include "luffa.h"
 
-#include "../sha3/sph_luffa.h"
+#include "third_party/sph/sph_luffa.h"
 
 void luffa_hash(const char* input, char* output, uint32_t len)
 {

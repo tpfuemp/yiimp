@@ -2,9 +2,9 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
- #include "../sha3/sph_blake.h"
-#include "../sha3/sph_bmw.h"
-#include "../sha3/sph_keccak.h"
+ #include "third_party/sph/sph_blake.h"
+#include "third_party/sph/sph_bmw.h"
+#include "third_party/sph/sph_keccak.h"
  #define _ALIGN(x) __attribute__ ((aligned(x)))
  extern uint64_t lbk3_height;
  void lbk3_hash(const char* input, char* output, uint32_t len)

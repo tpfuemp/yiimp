@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <openssl/aes.h>
 #include <openssl/evp.h>
-#include "sha256.h"
+#include "algos/sha2/sha256.h"
 
 #ifdef __cplusplus
 extern "C" {

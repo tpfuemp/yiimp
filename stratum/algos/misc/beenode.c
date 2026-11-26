@@ -5,12 +5,12 @@
 #include <stdio.h>
 
 
-#include "honeycomb/facet_one.h"
-#include "honeycomb/facet_two.h"
-#include "honeycomb/facet_three.h"
-#include "honeycomb/facet_four.h"
-#include "honeycomb/facet_five.h"
-#include "honeycomb/facet_six.h"
+#include "algos/honeycomb/facet_one.h"
+#include "algos/honeycomb/facet_two.h"
+#include "algos/honeycomb/facet_three.h"
+#include "algos/honeycomb/facet_four.h"
+#include "algos/honeycomb/facet_five.h"
+#include "algos/honeycomb/facet_six.h"
 
 
 

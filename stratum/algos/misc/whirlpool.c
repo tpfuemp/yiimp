@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../sha3/sph_whirlpool.h"
+#include "third_party/sph/sph_whirlpool.h"
 
 /* untested ! */
 

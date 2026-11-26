@@ -3,12 +3,12 @@
 #include <string.h>
 #include <stdio.h>
 
-#include <sha3/sph_skein.h>
-#include <sha3/sph_shavite.h>
-#include <sha3/sph_shabal.h>
+#include <third_party/sph/sph_skein.h>
+#include <third_party/sph/sph_shavite.h>
+#include <third_party/sph/sph_shabal.h>
 //#include <sha3/sph_streebog.h>
 
-#include "gost.h"
+#include "algos/misc/gost.h"
 
 void veltor_hash(const char *input, char* output, uint32_t len)
 {

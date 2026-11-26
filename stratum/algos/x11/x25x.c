@@ -2,36 +2,36 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <sha3/sph_blake.h>
-#include <sha3/sph_bmw.h>
-#include <sha3/sph_groestl.h>
-#include <sha3/sph_jh.h>
-#include <sha3/sph_keccak.h>
-#include <sha3/sph_skein.h>
-#include <sha3/sph_luffa.h>
-#include <sha3/sph_cubehash.h>
-#include <sha3/sph_shavite.h>
-#include <sha3/sph_simd.h>
-#include <sha3/sph_echo.h>
-#include <sha3/sph_hamsi.h>
-#include <sha3/sph_fugue.h>
-#include <sha3/sph_shabal.h>
-#include <sha3/sph_whirlpool.h>
-#include <sha3/sph_sha2.h>
-#include <sha3/sph_haval.h>
-#include <sha3/sph_tiger.h>
-#include <sha3/sph_panama.h>
+#include <third_party/sph/sph_blake.h>
+#include <third_party/sph/sph_bmw.h>
+#include <third_party/sph/sph_groestl.h>
+#include <third_party/sph/sph_jh.h>
+#include <third_party/sph/sph_keccak.h>
+#include <third_party/sph/sph_skein.h>
+#include <third_party/sph/sph_luffa.h>
+#include <third_party/sph/sph_cubehash.h>
+#include <third_party/sph/sph_shavite.h>
+#include <third_party/sph/sph_simd.h>
+#include <third_party/sph/sph_echo.h>
+#include <third_party/sph/sph_hamsi.h>
+#include <third_party/sph/sph_fugue.h>
+#include <third_party/sph/sph_shabal.h>
+#include <third_party/sph/sph_whirlpool.h>
+#include <third_party/sph/sph_sha2.h>
+#include <third_party/sph/sph_haval.h>
+#include <third_party/sph/sph_tiger.h>
+#include <third_party/sph/sph_panama.h>
 // reference BLAKE2 (algos/blake2-ref), the implementation libalgos.a links.
 // sha3/blake2s.h declares a same-named blake2s() with another signature;
 // calling that one hit the blake2-ref symbol and left the hash all-zero.
-#include "blake2-ref/blake2.h"
+#include "third_party/blake2-ref/blake2.h"
 
-#include "SWIFFTX/SWIFFTX.h"
-#include "lane.h"
-#include "gost.h"
-#include "Lyra2.h"
+#include "third_party/SWIFFTX/SWIFFTX.h"
+#include "algos/misc/lane.h"
+#include "algos/misc/gost.h"
+#include "algos/lyra2/Lyra2.h"
 
-#include "common.h"
+#include "algos/common/common.h"
 
 void x25x_hash(const char* input, char* output, uint32_t len)
 {

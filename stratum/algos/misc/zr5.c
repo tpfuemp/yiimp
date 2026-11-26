@@ -3,11 +3,11 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "../sha3/sph_blake.h"
-#include "../sha3/sph_groestl.h"
-#include "../sha3/sph_jh.h"
-#include "../sha3/sph_keccak.h"
-#include "../sha3/sph_skein.h"
+#include "third_party/sph/sph_blake.h"
+#include "third_party/sph/sph_groestl.h"
+#include "third_party/sph/sph_jh.h"
+#include "third_party/sph/sph_keccak.h"
+#include "third_party/sph/sph_skein.h"
 
 //#define TEST_VERBOSELY
 

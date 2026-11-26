@@ -3,10 +3,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <malloc.h>  // _aligned_malloc, _aligned_free
-#include "blake3/blake3.h"
-#include "blake3/blake3_impl.h"
-#include "sha3/SimpleFIPS202.h"
-#include "ar2/argon2.h"  // Update path to argon2d header
+#include "third_party/blake3/blake3.h"
+#include "third_party/blake3/blake3_impl.h"
+#include "third_party/keccak-xkcp/SimpleFIPS202.h"
+#include "algos/argon2/ar2/argon2.h"  // Update path to argon2d header
 
 void rinhash_hash(const char* input, char* output, uint32_t len)
 {
