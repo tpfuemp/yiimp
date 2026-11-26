@@ -62,17 +62,47 @@ foreach ($workers as $worker) {
                       'sharePercent', 'pctBad', 'rateDisplay', 'displayName', 'dns');
 }
 
+$shareTotal = array_sum(array_column($rows, 'shares'));
+$blockTotal = array_sum(array_column($rows, 'wBlocks'));
+$rateTotal  = $totalRate > 0 ? $conv->Itoa2($totalRate) . 'H' : '—';
+
 ?>
 
 <?php if ($isLegacy): ?>
 <!-- ══════════════════════════════════════════════════════════════════════════
      LEGACY
      ══════════════════════════════════════════════════════════════════════════ -->
-<div align="right" style="margin-top:-20px; margin-bottom:6px;">
-    <input class="search" type="search" data-column="all"
-           style="width:140px;" placeholder="Search…">
+<div class="admn-kpis">
+    <div class="admn-kpi accent">
+        <span class="k-label">Pool rate</span>
+        <span class="k-value"><?= Html::encode($rateTotal) ?></span>
+        <span class="k-sub"><?= Html::encode($algo) ?> · live window</span>
+    </div>
+    <div class="admn-kpi">
+        <span class="k-label">Workers</span>
+        <span class="k-value"><?= count($workers) ?></span>
+        <span class="k-sub">reporting hashrate</span>
+    </div>
+    <div class="admn-kpi">
+        <span class="k-label">Shares</span>
+        <span class="k-value"><?= (int) $shareTotal ?></span>
+        <span class="k-sub">all-time</span>
+    </div>
+    <div class="admn-kpi good">
+        <span class="k-label">Blocks</span>
+        <span class="k-value"><?= (int) $blockTotal ?></span>
+        <span class="k-sub">worker found</span>
+    </div>
 </div>
-<style>tr.ssrow.filtered { display: none; }</style>
+
+<div class="admn-card">
+    <div class="admn-card-head">
+        <span class="admn-head-main"><span class="admn-title">Workers</span>
+        <span class="admn-sub">stratum clients · live rates</span></span>
+        <input class="search" type="search" data-column="all" placeholder="Search…">
+    </div>
+    <div class="admn-card-body flush">
+    <style>tr.ssrow.filtered { display: none; }</style>
 
 <?php Yii::$app->ViewUtils->showTableSorter('maintable', "{
     tableClass: 'dataGrid',
@@ -117,7 +147,7 @@ foreach ($workers as $worker) {
         <b><?= $coinLink ?></b>
         <?= $coinsym ? '&nbsp;(' . Html::encode($coinsym) . ')' : '<span class="text-muted">-</span>' ?>
     </td>
-    <td><?= Html::a('<b>' . Html::encode($worker->name) . '</b>', '/?address=' . urlencode($worker->name), ['encode' => false]) ?></td>
+    <td><?= Html::a('<b>' . Html::encode($worker->name) . '</b>', Yii::$app->YiimpUtils->walletUrl($worker->name), ['encode' => false]) ?></td>
     <td><?= Html::encode($worker->password) ?></td>
     <td title="<?= Html::encode($worker->ip) ?>"><?= Html::encode($r['dns']) ?></td>
     <td><?= Html::encode($worker->version) ?></td>
@@ -135,6 +165,8 @@ foreach ($workers as $worker) {
 <?php endforeach ?>
 </tbody>
 </table>
+    </div>
+</div>
 
 
 <?php elseif (!$isTailwind): ?>
@@ -195,7 +227,7 @@ foreach ($workers as $worker) {
         </td>
         <td>
             <?= Html::a('<strong>' . Html::encode($worker->name) . '</strong>',
-                '/?address=' . urlencode($worker->name), ['encode' => false]) ?>
+                Yii::$app->YiimpUtils->walletUrl($worker->name), ['encode' => false]) ?>
         </td>
         <td class="small text-muted"><?= Html::encode($worker->password) ?></td>
         <td class="small font-monospace text-muted" title="<?= Html::encode($worker->ip) ?>">
@@ -338,7 +370,7 @@ Yii::$app->ViewUtils->JavascriptReady("
         <td class="px-3 py-2">
             <?= Html::a('<span class="font-medium text-gray-900 dark:text-gray-100">'
                 . Html::encode($worker->name) . '</span>',
-                '/?address=' . urlencode($worker->name),
+                Yii::$app->YiimpUtils->walletUrl($worker->name),
                 ['encode' => false,
                  'class'  => 'hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors']) ?>
         </td>

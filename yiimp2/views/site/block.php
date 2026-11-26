@@ -19,9 +19,6 @@ $coinDetails = $coin ? Yii::$app->controller->renderPartial('results/coin_detail
 <!-- ══════════════════════════════════════════════════════════════════════════
      LEGACY
      ══════════════════════════════════════════════════════════════════════════ -->
-<?php if ($coin): ?>
-<h3><?= Html::encode($coin->name) ?> (<?= Html::encode($coin->symbol) ?>) &mdash; Blocks</h3>
-<?php endif ?>
 <?= $coinDetails ?>
 <div id="main_results">
     <p style="color:#aaa;margin:24px 0;">Loading&hellip;</p>
@@ -104,7 +101,7 @@ function tick() {
 }
 
 function main_ready(data) {
-    document.getElementById('main_results').innerHTML = data;
+    $('#main_results').html(data);
     <?php if ($isTailwind): ?>
     if (typeof lucide !== 'undefined') lucide.createIcons();
     <?php endif ?>

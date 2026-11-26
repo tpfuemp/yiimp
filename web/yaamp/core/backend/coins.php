@@ -63,8 +63,24 @@ function BackendCoinsUpdate()
 
 		if ($debug) echo "{$coin->symbol}\n";
 
+		$isNebRpc = (isset($coin->algo) && $coin->algo === 'nebhash') ||
+			(isset($coin->symbol) && $coin->symbol === 'NEB');
+
 		if(isset($info['difficulty']))
 			$difficulty = $info['difficulty'];
+		else if ($isNebRpc && isset($info['bits']))
+		{
+			// NEB compact bits are (shift << 24) | mantissa and the target is
+			// mantissa << shift as a 256-bit little-endian value. Bitcoin's
+			// decode_compact() assumes a 3-byte exponent and divides by zero
+			// here, which aborts the whole update before block_height is set.
+			$nebBits      = (int) $info['bits'];
+			$nebShift     = ($nebBits >> 24) & 0xff;
+			$nebMantissa  = $nebBits & 0x00ffffff;
+			$difficulty   = ($nebMantissa > 0 && $nebShift <= 232)
+				? (pow(2.0, 256 - $nebShift) / $nebMantissa)
+				: 0;
+		}
 		else
 			$difficulty = $remote->getdifficulty();
 
@@ -147,7 +163,13 @@ function BackendCoinsUpdate()
 			}
 		}
 
-		if(is_null($coin->hassubmitblock))
+		// Ethereum-style nodes do not implement Bitcoin-only RPC methods such
+		// as submitblock/getauxblock/getblocktemplate. Skip those probes; the
+		// GETH/NIRO readiness branch below still handles auto_ready.
+		$isEthRpc = in_array(strtoupper((string) $coin->rpcencoding), ['GETH', 'NIRO'], true);
+		$skipBitcoinProbes = $isEthRpc || $isNebRpc;
+
+		if(!$skipBitcoinProbes && is_null($coin->hassubmitblock))
 		{
 			$remote->submitblock('');
 			if(strcasecmp($remote->error, 'method not found') == 0)
@@ -156,7 +178,7 @@ function BackendCoinsUpdate()
 				$coin->hassubmitblock = true;
 		}
 
-		if(is_null($coin->auxpow))
+		if(!$skipBitcoinProbes && is_null($coin->auxpow))
 		{
 			$ret = $remote->getauxblock();
 
@@ -166,17 +188,24 @@ function BackendCoinsUpdate()
 				$coin->auxpow = true;
 		}
 
+        if ($isEthRpc || $isNebRpc) {
+            // geth/NIRO/NEB have no Bitcoin getblocktemplate; leave $template
+            // empty so their readiness branch below only checks connectivity.
+            $template = false;
+        }
         // Kiiro Core requires explicit segwit rule support and the pool wallet
         // in the GBT request; otherwise it rejects the call and the backend
         // would clear auto_ready.
-        if ($coin->algo == 'firopow' || $coin->symbol == 'KIIRO') {
+        else if ($coin->algo == 'firopow' || $coin->symbol == 'KIIRO') {
             $template = $remote->getblocktemplate('{"mode":"template","rules":["segwit"]},' . json_encode((string) $coin->master_wallet));
         }
-        // Scash Core requires the segwit rule; the pool verifies RandomX itself
+        // Scash Core requires the segwit rule in GBT requests. The pool
+        // verifies RandomX itself; the node only needs to supply templates.
         else if ($coin->algo == 'randomscash') {
             $template = $remote->getblocktemplate('{"rules":["segwit"]}');
         }
-        // Lumenite Core v1.2 requires both rule sets
+        // Lumenite Core v1.2 requires both rule sets even though segwit is
+        // active from height 1 and no mweb template fields are currently sent.
         else if ($coin->algo == 'homescrypt') {
             $template = $remote->getblocktemplate('{"rules":["segwit","mweb"]}');
         }
@@ -296,8 +325,10 @@ function BackendCoinsUpdate()
 			}
 		}
 
-		else if ($coin->rpcencoding == 'GETH' || $coin->rpcencoding == 'NIRO')
+		else if ($coin->rpcencoding == 'GETH' || $coin->rpcencoding == 'NIRO' || $isNebRpc)
 		{
+			// NEB's native getinfo reports connections and slots; PoW work is
+			// consumed by stratum from the node work service, not GBT.
 			$coin->auto_ready = ($coin->connections > 0);
 		}
 
@@ -431,7 +462,10 @@ function BackendCoinsUpdate()
 		}
 
 		if($coin->network_hash) {
-			$coin->network_ttf = intval($coin->difficulty * 0x100000000 / $coin->network_hash);
+			// NEB's difficulty is 2^256/target, i.e. hashes per block, so
+			// its TTF is difficulty/network_hash without the Bitcoin 2^32.
+			$ttf_factor = yaamp_is_nebhash_coin($coin) ? 1.0 : 0x100000000;
+			$coin->network_ttf = intval($coin->difficulty * $ttf_factor / $coin->network_hash);
 			if($coin->network_ttf > 2147483647) $coin->network_ttf = 2147483647;
 		}
 

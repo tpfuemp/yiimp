@@ -10,6 +10,14 @@
 /** @var array<int,int>         $minerCountMap */
 /** @var array<int,array>       $blockDataMap  */
 /** @var array<int,float>       $paidMap       */
+/** @var float                  $totalBalance  */
+/** @var float                  $totalPaid     */
+/** @var string                 $balanceFmt    */
+/** @var string                 $paidFmt       */
+/** @var string                 $totalsNote    */
+/** @var string                 $balanceNote   */
+/** @var string                 $paidNote      */
+/** @var bool                   $isAll         */
 
 use yii\helpers\Html;
 
@@ -18,8 +26,6 @@ $isTailwind = Yii::$app->LayoutManager->isTailwind();
 $isLegacy   = Yii::$app->LayoutManager->isLegacy();
 
 // ── Shared row computation ────────────────────────────────────────────────────
-$totalBalance = 0.0;
-$totalPaid    = 0.0;
 $rows = [];
 
 foreach ($users as $user) {
@@ -34,14 +40,11 @@ foreach ($users as $user) {
                   ? round($blockData['diff_sum'] / $paid, 3) : '?';
     $pctBad     = $userRate ? round($userBad * 100 / $userRate, 3) : 0;
 
-    $totalBalance += (float) $user->balance;
-    $totalPaid    += $paid;
     $rows[] = compact('user', 'uid', 'userRate', 'pctBad', 'minerCount',
                       'blockCount', 'blockDiff', 'paid');
 }
 
-$balanceFmt = $conv->bitcoinvaluetoa($totalBalance);
-$paidFmt    = $conv->bitcoinvaluetoa($totalPaid);
+$workerTotal = array_sum(array_column($rows, 'minerCount'));
 
 // ── Action link builders ──────────────────────────────────────────────────────
 if ($isTailwind) {
@@ -62,14 +65,37 @@ if ($isTailwind) {
 <!-- ══════════════════════════════════════════════════════════════════════════
      LEGACY
      ══════════════════════════════════════════════════════════════════════════ -->
-<div align="right" style="margin-top:-20px; margin-bottom:6px;">
-    <input class="search" type="search" data-column="all" style="width:140px;" placeholder="Search…">
+<div class="admn-kpis">
+    <div class="admn-kpi accent">
+        <span class="k-label">Users</span>
+        <span class="k-value"><?= count($users) ?></span>
+        <span class="k-sub"><?= Html::encode($symbol) ?></span>
+    </div>
+    <div class="admn-kpi">
+        <span class="k-label">Workers</span>
+        <span class="k-value"><?= (int) $workerTotal ?></span>
+        <span class="k-sub">registered miners</span>
+    </div>
+    <div class="admn-kpi warn">
+        <span class="k-label">Balance</span>
+        <span class="k-value"><?= Html::encode($balanceFmt) ?></span>
+        <span class="k-sub"><?= Html::encode($balanceNote) ?></span>
+    </div>
+    <div class="admn-kpi good">
+        <span class="k-label">Total paid</span>
+        <span class="k-value"><?= Html::encode($paidFmt) ?></span>
+        <span class="k-sub"><?= Html::encode($paidNote) ?></span>
+    </div>
 </div>
-<style>
-.red { color: darkred; }
-tr.ssrow.filtered { display: none; }
-.actions a { margin-right: 4px; }
-</style>
+
+<div class="admn-card">
+    <div class="admn-card-head">
+        <span class="admn-head-main"><span class="admn-title">Miner Accounts</span>
+        <span class="admn-sub">balances · hashrate · controls</span></span>
+        <input class="search" type="search" data-column="all" placeholder="Search…">
+    </div>
+    <div class="admn-card-body flush">
+    <style>tr.ssrow.filtered { display: none; }</style>
 
 <?php Yii::$app->ViewUtils->showTableSorter('maintable', "{
     tableClass: 'dataGrid',
@@ -116,7 +142,7 @@ tr.ssrow.filtered { display: none; }
     <td width="24"><?= (int) $uid ?></td>
     <td width="16"><?= $coinImg ?></td>
     <td width="48"><b><?= $coinLink ?></b></td>
-    <td><?= Html::a('<b>' . Html::encode($user->username) . '</b>', ['/?address=' . urlencode($user->username)], ['encode' => false]) ?></td>
+    <td><?= Html::a('<b>' . Html::encode($user->username) . '</b>', [Yii::$app->YiimpUtils->walletUrl($user->username)], ['encode' => false]) ?></td>
     <td data="<?= (int) $user->last_earning ?>"><?= $conv->datetoa2($user->last_earning) ?></td>
     <td align="right"><?= $r['minerCount'] ?></td>
     <td width="32" data="<?= (int) $r['userRate'] ?>" align="right">
@@ -150,7 +176,7 @@ tr.ssrow.filtered { display: none; }
 </tbody>
 <tfoot>
 <tr class="ssfoot" style="border-top:2px solid #eee;">
-    <th colspan="3"><b>Users Total (<?= count($users) ?>)</b></th>
+    <th colspan="3"><b>Users Total (<?= count($users) ?>)</b><?php if ($isAll && $totalsNote !== ''): ?> <small style="font-weight:normal;color:#888;"><?= Html::encode($totalsNote) ?></small><?php endif ?></th>
     <?php for ($c = 0; $c < 7; $c++): ?><th></th><?php endfor ?>
     <th align="right"><b><?= Html::encode($balanceFmt) ?></b></th>
     <th align="right"><b><?= Html::encode($paidFmt) ?></b></th>
@@ -160,18 +186,20 @@ tr.ssrow.filtered { display: none; }
 <tr class="ssfoot" style="border-top:2px solid #eee;">
     <th colspan="3"><b>Wallet Balance</b></th>
     <?php for ($c = 0; $c < 7; $c++): ?><th></th><?php endfor ?>
-    <th align="right"><b><?= Html::encode($conv->bitcoinvaluetoa($coin->balance)) ?></b></th>
+    <th align="right"><b><?= Html::encode($conv->bitcoinvaluetoa($coin->balance)) ?> <?= Html::encode($coin->symbol) ?></b></th>
     <th colspan="2"></th>
 </tr>
 <tr class="ssfoot" style="border-top:2px solid #eee;">
     <th colspan="3"><b>Wallet Profit</b></th>
     <?php for ($c = 0; $c < 7; $c++): ?><th></th><?php endfor ?>
-    <th align="right"><b><?= Html::encode($conv->bitcoinvaluetoa($coin->balance - $totalBalance)) ?></b></th>
+    <th align="right"><b><?= Html::encode($conv->bitcoinvaluetoa($coin->balance - $totalBalance)) ?> <?= Html::encode($coin->symbol) ?></b></th>
     <th colspan="2"></th>
 </tr>
 <?php endif ?>
 </tfoot>
 </table>
+    </div>
+</div>
 
 
 <?php elseif (!$isTailwind): ?>
@@ -234,7 +262,7 @@ tr.ssrow.filtered { display: none; }
         </td>
         <td>
             <?= Html::a('<strong>' . Html::encode($user->username) . '</strong>',
-                '/?address=' . urlencode($user->username),
+                Yii::$app->YiimpUtils->walletUrl($user->username),
                 ['encode' => false]) ?>
             <?php if ($user->is_locked): ?>
                 <span class="badge bg-danger ms-1">locked</span>
@@ -279,7 +307,7 @@ tr.ssrow.filtered { display: none; }
     </tbody>
     <tfoot class="table-light">
     <tr>
-        <th colspan="10" class="text-muted small">Users Total (<?= count($users) ?>)</th>
+        <th colspan="10" class="text-muted small">Users Total (<?= count($users) ?>)<?php if ($isAll && $totalsNote !== ''): ?> · <?= Html::encode($totalsNote) ?><?php endif ?></th>
         <th class="text-end small"><strong><?= Html::encode($balanceFmt) ?></strong></th>
         <th class="text-end small"><strong><?= Html::encode($paidFmt) ?></strong></th>
         <th></th>
@@ -287,12 +315,12 @@ tr.ssrow.filtered { display: none; }
     <?php if ($coin): ?>
     <tr>
         <th colspan="10" class="text-muted small">Wallet Balance</th>
-        <th class="text-end small"><strong><?= Html::encode($conv->bitcoinvaluetoa($coin->balance)) ?></strong></th>
+        <th class="text-end small"><strong><?= Html::encode($conv->bitcoinvaluetoa($coin->balance)) ?> <?= Html::encode($coin->symbol) ?></strong></th>
         <th colspan="2"></th>
     </tr>
     <tr>
         <th colspan="10" class="text-muted small">Wallet Profit</th>
-        <th class="text-end small"><strong><?= Html::encode($conv->bitcoinvaluetoa($coin->balance - $totalBalance)) ?></strong></th>
+        <th class="text-end small"><strong><?= Html::encode($conv->bitcoinvaluetoa($coin->balance - $totalBalance)) ?> <?= Html::encode($coin->symbol) ?></strong></th>
         <th colspan="2"></th>
     </tr>
     <?php endif ?>
@@ -409,7 +437,7 @@ Yii::$app->ViewUtils->JavascriptReady("
             <div class="flex items-center gap-1.5 flex-wrap">
                 <?= Html::a('<span class="font-medium text-gray-900 dark:text-gray-100">'
                     . Html::encode($user->username) . '</span>',
-                    '/?address=' . urlencode($user->username),
+                    Yii::$app->YiimpUtils->walletUrl($user->username),
                     ['encode' => false,
                      'class'  => 'hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors']) ?>
                 <?php if ($locked): ?>
@@ -483,6 +511,9 @@ Yii::$app->ViewUtils->JavascriptReady("
         <div class="px-4 py-2 flex items-center justify-between text-xs">
             <span class="text-gray-500 dark:text-gray-400">
                 Users total (<?= count($users) ?>)
+                <?php if ($isAll && $totalsNote !== ''): ?>
+                    <span class="block text-[10px] font-normal text-gray-400 dark:text-gray-500"><?= Html::encode($totalsNote) ?></span>
+                <?php endif ?>
             </span>
             <div class="flex items-center gap-6 font-mono tabular-nums">
                 <span class="text-gray-500 dark:text-gray-400">Balance
@@ -497,14 +528,14 @@ Yii::$app->ViewUtils->JavascriptReady("
         <div class="px-4 py-2 flex items-center justify-between text-xs">
             <span class="text-gray-500 dark:text-gray-400">Wallet balance</span>
             <span class="font-mono tabular-nums text-gray-700 dark:text-gray-300">
-                <?= Html::encode($conv->bitcoinvaluetoa($coin->balance)) ?>
+                <?= Html::encode($conv->bitcoinvaluetoa($coin->balance)) ?> <?= Html::encode($coin->symbol) ?>
             </span>
         </div>
         <div class="px-4 py-2 flex items-center justify-between text-xs">
             <span class="text-gray-500 dark:text-gray-400">Wallet profit</span>
             <span class="font-mono tabular-nums
                          <?= ($coin->balance - $totalBalance) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400' ?>">
-                <?= Html::encode($conv->bitcoinvaluetoa($coin->balance - $totalBalance)) ?>
+                <?= Html::encode($conv->bitcoinvaluetoa($coin->balance - $totalBalance)) ?> <?= Html::encode($coin->symbol) ?>
             </span>
         </div>
         <?php endif ?>

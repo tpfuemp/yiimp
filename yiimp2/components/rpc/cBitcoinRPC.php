@@ -86,10 +86,10 @@ class cBitcoinRPC implements iRPCConnector
 
         if ($method === 'getblocktemplate') {
             $param   = $params[0] ?? '';
-            $request = "{\"method\":\"$method\",\"params\":[$param],\"id\":{$this->id}}";
+            $request = "{\"jsonrpc\":\"2.0\",\"method\":\"$method\",\"params\":[$param],\"id\":{$this->id}}";
         } else {
             $params  = array_values($params);
-            $request = json_encode(['method' => $method, 'params' => $params, 'id' => $this->id]);
+            $request = json_encode(['jsonrpc' => '2.0', 'method' => $method, 'params' => $params, 'id' => $this->id]);
         }
 
         $curl    = curl_init("{$this->proto}://{$this->username}:{$this->password}@{$this->host}:{$this->port}/{$this->url}");

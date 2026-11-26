@@ -185,3 +185,8 @@ $configCustomPorts = [
 $configAlgoNormCoef = [
 //  'x11' => 5.0,
 ];
+
+// NEB payouts go through the neb-wallet CLI (defaults shown)
+//define('YIIMP_NEB_WALLET_BIN', '/usr/local/bin/neb-wallet');
+//define('YIIMP_NEB_WALLET_FILE', '/etc/yiimp/neb/pool-wallet.txt');
+//define('YIIMP_NEB_WALLET_PASSWORD_FILE', '/etc/yiimp/neb/wallet-password.txt');

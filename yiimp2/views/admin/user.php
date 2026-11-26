@@ -10,24 +10,38 @@ $this->title = 'Users';
 $isTailwind  = Yii::$app->LayoutManager->isTailwind();
 $isLegacy    = Yii::$app->LayoutManager->isLegacy();
 
-echo Yii::$app->ViewUtils->getAdminSideBarLinks();
-
-$options = '<option value="all"' . ($symbol === 'all' ? ' selected' : '') . '>— all —</option>';
+$options      = '<option value="all"' . ($symbol === 'all' ? ' selected' : '') . '>— all —</option>';
+$knownSymbols = [];
 foreach ($activeCoins as $coin) {
-    $sel      = $coin->symbol === $symbol ? ' selected' : '';
-    $options .= '<option value="' . Html::encode($coin->symbol) . '"' . $sel . '>'
-              . Html::encode($coin->symbol) . '</option>';
+    $knownSymbols[] = $coin->symbol;
+    $sel            = $coin->symbol === $symbol ? ' selected' : '';
+    $options       .= '<option value="' . Html::encode($coin->symbol) . '"' . $sel . '>'
+                    . Html::encode($coin->symbol) . '</option>';
+}
+// Keep a deep-linked ?symbol=... usable even when that coin is not in the
+// active list; otherwise the select silently resets to "all" on page load.
+if ($symbol !== 'all' && !in_array($symbol, $knownSymbols, true)) {
+    $options = '<option value="' . Html::encode($symbol) . '" selected>'
+             . Html::encode($symbol) . '</option>' . $options;
 }
 
 $homeUrl = Yii::$app->homeUrl;
 ?>
 
 <?php if ($isLegacy): ?>
-<div align="right" style="margin-top:-14px; margin-bottom:-6px; margin-right:140px;">
-    Select coin: <select id="coin_select"><?= $options ?></select>&nbsp;
+<div class="admn-page">
+<?= Yii::$app->ViewUtils->getAdminMiningToolbar('Users', 'miner accounts · admin console', 'USERS', 'live · 30s') ?>
+<div class="admn-selectbar">
+    <label for="coin_select">Coin</label>
+    <select id="coin_select"><?= $options ?></select>
+    <span class="admn-hint">switch coin to reload the table</span>
+</div>
+<div id="main_results"></div>
 </div>
 
-<?php elseif (!$isTailwind): ?>
+<?php else: ?>
+<?= Yii::$app->ViewUtils->getAdminSideBarLinks() ?>
+<?php if (!$isTailwind): ?>
 <div class="d-flex align-items-center gap-2 mb-2">
     <label class="text-muted small mb-0">Coin:</label>
     <select id="coin_select" class="form-select form-select-sm" style="width:140px;">
@@ -48,6 +62,7 @@ $homeUrl = Yii::$app->homeUrl;
 <?php endif ?>
 
 <div id="main_results"></div>
+<?php endif ?>
 
 <script>
 $(function () {

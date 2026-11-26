@@ -16,7 +16,14 @@ $isTailwind  = Yii::$app->LayoutManager->isTailwind();
 $isLegacy    = Yii::$app->LayoutManager->isLegacy();
 $conv        = Yii::$app->ConversionUtils;
 
-echo Yii::$app->ViewUtils->getAdminSideBarLinks();
+if ($isLegacy) {
+    echo '<div class="admn-page">';
+    echo Yii::$app->ViewUtils->getAdminMiningToolbar(
+        'Big Miners', 'anomaly watchlist · admin console', 'WHALES', 'static · on load'
+    );
+} else {
+    echo Yii::$app->ViewUtils->getAdminSideBarLinks();
+}
 
 // ── Shared row resolution ─────────────────────────────────────────────────────
 $resolved = [];
@@ -30,6 +37,11 @@ foreach ($rows as [$userId, $what]) {
     $shareCount = $shareCountMap[$userId]    ?? 0;
     $resolved[] = compact('user', 'coin', 'what', 'paidRaw', 'blockCount', 'minerCount', 'shareCount');
 }
+
+$whaleCount   = count($resolved);
+$whalePaid    = array_sum(array_column($resolved, 'paidRaw'));
+$whaleMiners  = array_sum(array_column($resolved, 'minerCount'));
+$whaleShares  = array_sum(array_column($resolved, 'shareCount'));
 
 // ── Reason badge helper ───────────────────────────────────────────────────────
 $reasonBadge = function(string $what) use ($isTailwind): string {
@@ -74,10 +86,37 @@ if ($isTailwind) {
 <!-- ══════════════════════════════════════════════════════════════════════════
      LEGACY
      ══════════════════════════════════════════════════════════════════════════ -->
-<div align="right" style="margin-top:-14px; margin-bottom:6px;">
-    <input class="search" type="search" data-column="all" style="width:140px;" placeholder="Search…">
+<div class="admn-kpis">
+    <div class="admn-kpi accent">
+        <span class="k-label">Watchlist</span>
+        <span class="k-value"><?= (int) $whaleCount ?></span>
+        <span class="k-sub">flagged accounts</span>
+    </div>
+    <div class="admn-kpi good">
+        <span class="k-label">Total paid</span>
+        <span class="k-value">₿ <?= Html::encode($conv->bitcoinvaluetoa($whalePaid)) ?></span>
+        <span class="k-sub">lifetime payouts</span>
+    </div>
+    <div class="admn-kpi">
+        <span class="k-label">Miners</span>
+        <span class="k-value"><?= (int) $whaleMiners ?></span>
+        <span class="k-sub">workers registered</span>
+    </div>
+    <div class="admn-kpi">
+        <span class="k-label">Shares</span>
+        <span class="k-value"><?= (int) $whaleShares ?></span>
+        <span class="k-sub">all-time valid + stale</span>
+    </div>
 </div>
-<style>tr.ssrow.filtered { display: none; }</style>
+
+<div class="admn-card">
+    <div class="admn-card-head">
+        <span class="admn-head-main"><span class="admn-title">Big Miners</span>
+        <span class="admn-sub">anomaly / high-activity users</span></span>
+        <input class="search" type="search" data-column="all" placeholder="Search…">
+    </div>
+    <div class="admn-card-body flush">
+    <style>tr.ssrow.filtered { display: none; }</style>
 
 <?php Yii::$app->ViewUtils->showTableSorter('maintable', "{
     tableClass: 'dataGrid',
@@ -110,7 +149,7 @@ if ($isTailwind) {
         <td width="60" colspan="2"></td>
     <?php endif ?>
     <td><?= Html::a('<b>' . Html::encode($user->username) . '</b>',
-            '/?address=' . urlencode($user->username), ['encode' => false]) ?></td>
+            Yii::$app->YiimpUtils->walletUrl($user->username), ['encode' => false]) ?></td>
     <td><?= Html::encode($r['what']) ?></td>
     <td><?= $conv->datetoa2($user->last_earning) ?></td>
     <td><?= $r['blockCount'] ?></td>
@@ -129,6 +168,9 @@ if ($isTailwind) {
 <?php endforeach ?>
 </tbody>
 </table>
+    </div>
+</div>
+</div><!-- /.admn-page -->
 
 
 <?php elseif (!$isTailwind): ?>
@@ -180,7 +222,7 @@ if ($isTailwind) {
         <?php endif ?></td>
         <td>
             <?= Html::a('<strong>' . Html::encode($user->username) . '</strong>',
-                '/?address=' . urlencode($user->username), ['encode' => false]) ?>
+                Yii::$app->YiimpUtils->walletUrl($user->username), ['encode' => false]) ?>
             <?php if ($user->is_locked): ?>
                 <span class="badge bg-danger ms-1">locked</span>
             <?php endif ?>
@@ -309,7 +351,7 @@ Yii::$app->ViewUtils->JavascriptReady("
             <div class="flex items-center gap-1.5 flex-wrap">
                 <?= Html::a('<span class="font-medium text-gray-900 dark:text-gray-100">'
                     . Html::encode($user->username) . '</span>',
-                    '/?address=' . urlencode($user->username),
+                    Yii::$app->YiimpUtils->walletUrl($user->username),
                     ['encode' => false,
                      'class'  => 'hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors']) ?>
                 <?php if ($locked): ?>

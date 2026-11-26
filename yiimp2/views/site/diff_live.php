@@ -14,6 +14,14 @@ $num = function ($value, int $decimals = 6): string {
     return rtrim(rtrim($s, '0'), '.');
 };
 
+$util = Yii::$app->YiimpUtils;
+$diffText = function ($algo, $raw) use ($num, $util): string {
+    if ($algo === 'nebhash') {
+        return number_format($util->display_difficulty($algo, $raw), 4, '.', ',');
+    }
+    return $num($raw);
+};
+
 $compact = function ($value) use ($conv): string {
     if ($value === null || $value === '') return '—';
     return (string) $conv->Itoa2($value, 3);
@@ -31,7 +39,7 @@ $ago = function ($ts) use ($now): string {
 $customNote = function (string $algo): string {
     return match ($algo) {
         'firopow'           => 'ignored (pool fixed)',
-        'ethash', 'etchash' => 'used as-is',
+        'ethash', 'etchash', 'meraki' => 'used as-is',
         default             => 'clamped',
     };
 };
@@ -75,7 +83,7 @@ $customNote = function (string $algo): string {
         <tr>
             <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= Html::encode($r['algo']) ?></td>
             <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= $r['port'] ? (int) $r['port'] : '—' ?></td>
-            <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= !empty($r['tls_port']) ? (int) $r['tls_port'] : '—' ?></td>
+            <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= $r['tls_port'] ? (int) $r['tls_port'] : '—' ?></td>
             <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= Html::encode($symbol) ?></td>
             <td style="border: 1px solid #ccc; padding: 4px 6px;">
                 <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:<?= $color ?>"></span>
@@ -123,16 +131,14 @@ $customNote = function (string $algo): string {
             $override = preg_match('/(?:^|,)\s*(s?d)=([^,]+)/', $password, $m)
                 ? $m[1] . '=' . $m[2]
                 : 'vardiff';
-            // public page: worker name only, a shortened address otherwise
-            $address    = (string) ($w['name'] ?? '');
             $workerName = (string) ($w['worker'] ?? '') !== ''
                 ? (string) $w['worker']
-                : (strlen($address) > 12 ? substr($address, 0, 6) . '…' . substr($address, -4) : $address);
+                : (strlen((string) ($w['name'] ?? '')) > 12 ? substr((string) $w['name'], 0, 6) . '…' . substr((string) $w['name'], -4) : (string) ($w['name'] ?? ''));	// public page: no full address
             ?>
         <tr>
             <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= Html::encode($workerName) ?></td>
             <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= Html::encode($w['algo']) ?></td>
-            <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= Html::encode($num($w['difficulty'])) ?></td>
+            <td style="border: 1px solid #ccc; padding: 4px 6px;" title="raw target difficulty: <?= Html::encode($num($w['difficulty'])) ?>"><?= Html::encode($diffText($w['algo'], $w['difficulty'])) ?></td>
             <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= Html::encode($override) ?></td>
             <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= Html::encode($w['version']) ?></td>
             <td style="border: 1px solid #ccc; padding: 4px 6px;"><?= Html::encode($ago($w['time'])) ?></td>

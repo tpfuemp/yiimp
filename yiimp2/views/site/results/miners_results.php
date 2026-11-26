@@ -48,7 +48,10 @@ foreach ($versionData as $row) {
 
 // ── Wrapper ───────────────────────────────────────────────────────────────────
 if ($isLegacy) {
-    echo "<div class='main-left-box'><div class='main-left-title'>Miners Version</div><div class='main-left-inner'>";
+    echo "<div class='main-left-box mv-card'><div class='main-left-title'>"
+       . "<span class='mn-head-main'><span>Miners Version</span>"
+       . "<span class='mn-sub'>" . Html::encode($algoLabel) . "</span></span>"
+       . "<span class='mc-badge'>live</span></div><div class='main-left-inner'>";
 } elseif (!$isTailwind) {
     echo '<div class="card shadow-sm"><div class="card-header py-2"><strong class="small">Miners Version</strong></div>'
        . '<div class="card-body p-0">';
@@ -174,7 +177,7 @@ echo <<<'CSS'
 #maintable2 .bar.alt i { background: linear-gradient(90deg, #6fc79a, #2fae5a); }
 #maintable2 .reject.bad { color: #d64545; }
 #maintable2 tr.total td { background: #f8fafc; font-weight: 700; color: #5b6675; }
-#maintable2 .mv-head {
+.mv-head {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -217,6 +220,16 @@ echo <<<'CSS'
     gap: 8px;
 }
 .mv-foot b { color: #7d8aa0; }
+@media(max-width:720px){
+    .mv-card > .main-left-title { flex-wrap: wrap; align-items: flex-start; }
+    .mv-card > .main-left-title .mn-head-main { flex: 1 1 100%; }
+    .mv-card > .main-left-title .mc-badge { flex: 0 0 auto; margin-left: auto; }
+    .mv-card .main-left-inner > div { min-width: 0; }
+    #maintable2.mv-table { table-layout: auto; min-width: 760px; }
+    .mv-head { padding: 8px 10px; }
+    .mv-head .hash-total { margin-left: 0; }
+    .mv-foot { flex-wrap: wrap; }
+}
 </style>
 CSS;
 
@@ -237,16 +250,17 @@ if ($isAdmin) {
     $extract .= ",{$rejectIdx}:function(n){return \$(n).attr('data')||\$(n).text()}";
 }
 $sortCfg = "{tableClass:'dataGrid2',textExtraction:{{$extract}}}";
-if ($isLegacy) {
-    Yii::$app->ViewUtils->showTableSorter('maintable2', $sortCfg);
-} else {
-    Yii::$app->ViewUtils->JavascriptReady("\$('#maintable2').tablesorter(" . $sortCfg . ");"
-        . "\$('.tablesorter-header').not('.sorter-false').css('cursor','pointer');");
-}
+// The view already emits its own <table>, so register the sorter with JS only.
+// showTableSorter() outputs an extra opening <table> that breaks the wrapper DOM.
+Yii::$app->ViewUtils->JavascriptReady("\$('#maintable2').tablesorter(" . $sortCfg . ");"
+    . "\$('.tablesorter-header').not('.sorter-false').css('cursor','pointer');");
 
 // ── Header strip ──────────────────────────────────────────────────────────────
 echo '<div class="mv-head">';
-echo '<span style="font-size:12px;font-weight:700;color:#1f467f">Miners Version</span>';
+// Legacy/adminlte wrappers already render the "Miners Version" card title.
+if ($isTailwind) {
+    echo '<span style="font-size:12px;font-weight:700;color:#1f467f">Miners Version</span>';
+}
 echo '<span class="pill">' . Html::encode($algoLabel) . '</span>';
 if ($showAlgo) {
     $displayAlgoCount = isset($algoCount) ? (int) $algoCount : count($algoSet);
@@ -264,8 +278,8 @@ echo '<table id="maintable2" class="mv-table">';
 echo '<thead><tr>';
 if ($showAlgo) {
     $w = $isAdmin
-        ? ['algo' => 9, 'ver' => 21, 'share' => 14, 'work' => 11, 'hash' => 18, 'avg' => 11, 'reject' => 16]
-        : ['algo' => 10, 'ver' => 26, 'share' => 17, 'work' => 13, 'hash' => 22, 'avg' => 12];
+        ? ['algo' => 9, 'ver' => 20, 'share' => 14, 'work' => 11, 'hash' => 18, 'avg' => 12, 'reject' => 16]
+        : ['algo' => 10, 'ver' => 25, 'share' => 17, 'work' => 13, 'hash' => 22, 'avg' => 13];
     echo '<th style="width:' . $w['algo'] . '%">Algo<span class="sort">↕</span></th>';
 } else {
     $w = $isAdmin

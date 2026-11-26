@@ -12,8 +12,14 @@ $isTailwind  = Yii::$app->LayoutManager->isTailwind();
 $isLegacy    = Yii::$app->LayoutManager->isLegacy();
 $conv        = Yii::$app->ConversionUtils;
 
-echo Yii::$app->ViewUtils->getAdminSideBarLinks();
-if ($isLegacy) echo '<br/><br/>';
+if ($isLegacy) {
+    echo '<div class="admn-page">';
+    echo Yii::$app->ViewUtils->getAdminMiningToolbar(
+        'Botnets', 'suspicious miner clusters · admin console', 'RISK', 'static · on load'
+    );
+} else {
+    echo Yii::$app->ViewUtils->getAdminSideBarLinks();
+}
 
 // ── Shared row resolution ─────────────────────────────────────────────────────
 $resolved = [];
@@ -22,6 +28,14 @@ foreach ($rows as $botnet) {
     $user = $accounts[$botnet['userid']] ?? null; if (!$user) continue;
     $coin = $coins[$user->coinid]        ?? null; if (!$coin) continue;
     $resolved[] = compact('botnet', 'user', 'coin');
+}
+
+$botnetGroups  = count($resolved);
+$botnetIps     = 0;
+$botnetWorkers = 0;
+foreach ($resolved as $r) {
+    $botnetIps     = max($botnetIps, (int) $r['botnet']['ips']);
+    $botnetWorkers += (int) $r['botnet']['workers'];
 }
 
 // ── Action link builder ───────────────────────────────────────────────────────
@@ -43,12 +57,31 @@ if ($isTailwind) {
 <!-- ══════════════════════════════════════════════════════════════════════════
      LEGACY
      ══════════════════════════════════════════════════════════════════════════ -->
-<style>
-.red { color: darkred; }
-table.dataGrid { max-width: 99.5%; }
-table.dataGrid a.red { color: darkred; }
-.actions form { display: inline; margin-right: 3px; }
-</style>
+<div class="admn-kpis">
+    <div class="admn-kpi <?= $botnetGroups > 0 ? 'warn' : 'good' ?>">
+        <span class="k-label">Flagged groups</span>
+        <span class="k-value"><?= (int) $botnetGroups ?></span>
+        <span class="k-sub">&gt; 10 distinct IPs per group</span>
+    </div>
+    <div class="admn-kpi accent">
+        <span class="k-label">Peak IPs</span>
+        <span class="k-value"><?= (int) $botnetIps ?></span>
+        <span class="k-sub">single worker group</span>
+    </div>
+    <div class="admn-kpi">
+        <span class="k-label">Workers</span>
+        <span class="k-value"><?= (int) $botnetWorkers ?></span>
+        <span class="k-sub">across flagged groups</span>
+    </div>
+</div>
+
+<div class="admn-card">
+    <div class="admn-card-head">
+        <span class="admn-head-main"><span class="admn-title">Suspected Botnets</span>
+        <span class="admn-sub">distinct IP clustering</span></span>
+        <span class="admn-badge <?= $botnetGroups > 0 ? 'warn' : 'good' ?>"><?= (int) $botnetGroups ?> groups</span>
+    </div>
+    <div class="admn-card-body flush">
 
 <?php Yii::$app->ViewUtils->showTableSorter('maintable', "{
     tableClass: 'dataGrid',
@@ -79,7 +112,7 @@ table.dataGrid a.red { color: darkred; }
     <td><?= Html::img(Html::encode($coin->image), ['width' => 16, 'alt' => Html::encode($coin->symbol)]) ?></td>
     <td><?= Html::a(Html::encode($coin->name), ['/admin/coinwallet', 'id' => $coin->id]) ?></td>
     <td><?= Html::encode($botnet['algo']) ?></td>
-    <td><?= Html::a(Html::encode($user->username), ['/?address=' . urlencode($user->username)]) ?></td>
+    <td><?= Html::a(Html::encode($user->username), [Yii::$app->YiimpUtils->walletUrl($user->username)]) ?></td>
     <td data="<?= (int) $botnet['time'] ?>"><?= $d ?></td>
     <td><?= (int) $botnet['pid'] ?></td>
     <td><b><?= (int) $botnet['ips'] ?></b></td>
@@ -108,7 +141,10 @@ table.dataGrid a.red { color: darkred; }
 <tr><th colspan="10">No botnets detected (threshold: &gt; 10 distinct IPs per worker group)</th></tr>
 <?php endif ?>
 </tfoot>
-</table><br>
+</table>
+    </div>
+</div>
+</div><!-- /.admn-page -->
 
 
 <?php elseif (!$isTailwind): ?>
@@ -160,7 +196,7 @@ table.dataGrid a.red { color: darkred; }
         <td><?= Html::a('<strong>' . Html::encode($coin->name) . '</strong>',
             ['/admin/coinwallet', 'id' => $coin->id], ['encode' => false]) ?></td>
         <td><span class="badge bg-light text-dark border font-monospace"><?= Html::encode($botnet['algo']) ?></span></td>
-        <td><?= Html::a(Html::encode($user->username), '/?address=' . urlencode($user->username)) ?></td>
+        <td><?= Html::a(Html::encode($user->username), Yii::$app->YiimpUtils->walletUrl($user->username)) ?></td>
         <td class="small text-muted" data="<?= (int) $botnet['time'] ?>"><?= $d ?></td>
         <td class="text-end small tabular-nums"><?= (int) $botnet['pid'] ?></td>
         <td class="text-end <?= $highIp ? 'text-danger fw-bold' : 'text-warning fw-semibold' ?>">
@@ -296,7 +332,7 @@ Yii::$app->ViewUtils->JavascriptReady("
 
         <td class="px-3 py-2.5">
             <?= Html::a(Html::encode($user->username),
-                '/?address=' . urlencode($user->username),
+                Yii::$app->YiimpUtils->walletUrl($user->username),
                 ['class' => 'hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors']) ?>
         </td>
 

@@ -98,6 +98,8 @@ function yaamp_get_algo_norm($algo)
 		'velvet'	=> 1.0,
 		'whirlpool'	=> 1.0,
 		'power2b'	=> 0.001,
+		// NEB profitability is quoted per GH (BTC->mBTC and MH->GH).
+		'nebhash'	=> 1000000,
 		'yescrypt'	=> 1.0,
 		'yescryptR8'	=> 1.0,
 		'yescryptR16'	=> 0.001,
@@ -212,6 +214,14 @@ function take_yaamp_fee($v, $algo, $percent=-1)
 function yaamp_hashrate_constant($algo=null)
 {
 	switch ($algo) {
+		case 'nebhash':
+			// NEB share difficulty is already the expected hash count
+			// (2^256 / 256-bit target). The generic Bitcoin scale below would
+			// multiply it by 2^42 and report PH/s for a single small GPU.
+			// Callers divide by 1000 to convert to Itoa2's H/s scale, so 1000
+			// exactly cancels that conversion for NEB.
+			$target = 1000;
+			break;
 		case 'equihash96':
 		case 'equihash125':
 		case 'equihash144':
@@ -252,9 +262,24 @@ function yaamp_hashrate_constant_coin($algo=null, $coinid=null)
     return pow(2, $coin_powlimit_bits);
 }
 
-function yaamp_hashrate_step()
+function yaamp_hashrate_step($algo=null)
 {
+	// NEB shares are Poisson-distributed and much rarer than typical Bitcoin
+	// shares. A 300s window jumped between 3 and 8 Mh/s for a steady ~5 Mh/s
+	// miner; 600s smooths that without hiding meaningful changes.
+	if ($algo === 'nebhash') return 600;
 	return 300;
+}
+
+function yaamp_rpc_hex_number($value)
+{
+	if (is_numeric($value)) return (float) $value;
+
+	$value = (string) $value;
+	if (strpos($value, '0x') === 0) $value = substr($value, 2);
+	if ($value === '' || !preg_match('/^[0-9a-f]+$/i', $value)) return 0.0;
+
+	return (float) hexdec($value);
 }
 
 /**
@@ -317,33 +342,171 @@ function yaamp_coin_image_url($coin)
 	return (string) $image;
 }
 
+function yaamp_is_nebhash_coin($coin)
+{
+	if (is_object($coin)) {
+		$algo   = isset($coin->algo) ? $coin->algo : null;
+		$symbol = isset($coin->symbol) ? $coin->symbol : null;
+	} elseif (is_array($coin)) {
+		$algo   = isset($coin['algo']) ? $coin['algo'] : null;
+		$symbol = isset($coin['symbol']) ? $coin['symbol'] : null;
+	} else {
+		return false;
+	}
+
+	return $algo === 'nebhash' || $symbol === 'NEB';
+}
+
+/**
+ * NEB nodes have no getnetworkhashps/getmininginfo RPC. Derive the rate from
+ * the last 120 blocks: NEB's compact bits are (shift << 24) | mantissa and the
+ * target is mantissa << shift, so the expected hashes per block are
+ * 2^(256-shift)/mantissa. Averaging over a block window is what
+ * getnetworkhashps does for Bitcoin-like chains.
+ */
+function yaamp_neb_network_hashrate(WalletRPC $remote, $blocks = 120)
+{
+	$tip = (int) $remote->getblockcount();
+	if ($tip <= 0 || !empty($remote->error)) return null;
+
+	$blocks = max(1, min((int) $blocks, $tip));
+	$start  = $tip - $blocks;
+
+	$sum      = 0.0;
+	$firstTs  = null;
+	$lastTs   = null;
+	$field    = function ($block, $key) {
+		if (is_object($block)) return isset($block->$key) ? $block->$key : null;
+		return is_array($block) && isset($block[$key]) ? $block[$key] : null;
+	};
+
+	for ($h = $start; $h <= $tip; $h++) {
+		$hash = $remote->getblockhash($h);
+		if (!$hash || !empty($remote->error)) return null;
+
+		$block = $remote->getblock($hash, true);
+		if ((!is_array($block) && !is_object($block)) || !empty($remote->error)) return null;
+
+		$bits = (int) $field($block, 'bits');
+		$time = (int) $field($block, 'time');
+		$shift = ($bits >> 24) & 0xff;
+		$mantissa = $bits & 0x00ffffff;
+		if ($mantissa <= 0 || $shift > 255 || $time <= 0) return null;
+
+		$sum += pow(2.0, 256 - $shift) / $mantissa;
+		if ($firstTs === null) $firstTs = $time;
+		$lastTs = $time;
+	}
+
+	$span = $lastTs - $firstTs;
+	if ($span <= 0) return null;
+
+	return $sum / $span;
+}
+
+function yaamp_geth_network_hashrate(WalletRPC $remote)
+{
+	$latest = $remote->eth_getBlockByNumber('latest', false);
+	if (!is_object($latest) && !is_array($latest)) return null;
+
+	$field = function ($block, $key) {
+		if (is_object($block)) return isset($block->$key) ? $block->$key : null;
+		return is_array($block) && isset($block[$key]) ? $block[$key] : null;
+	};
+
+	$height = yaamp_rpc_hex_number($field($latest, 'number'));
+	if ($height <= 0) return null;
+
+	// Match getnetworkhashps' 120-block window. A single block gap is too noisy.
+	$blocks = min(120, (int) $height);
+	$previous = $remote->eth_getBlockByNumber('0x'.dechex((int) $height - $blocks), false);
+	if (!is_object($previous) && !is_array($previous)) return null;
+
+	$difficulty = yaamp_rpc_hex_number($field($latest, 'difficulty'));
+	$gap = yaamp_rpc_hex_number($field($latest, 'timestamp'))
+		- yaamp_rpc_hex_number($field($previous, 'timestamp'));
+
+	if ($difficulty <= 0 || $gap <= 0) return null;
+
+	return $difficulty / ($gap / $blocks);
+}
+
+/**
+ * RPC-derived network hashrate shared by legacy backend, API and public pages.
+ * The cache key is the same one used by yiimp2's Coins::getRpcNetworkHashrate(),
+ * so every caller sees the same value within the 60s window.
+ */
+function yaamp_rpc_network_hashrate($coin, $ttl = 60)
+{
+	if (empty($coin->rpchost)) return null;
+
+	// Alphanumeric only: Yii2's Cache::buildKey() otherwise MD5-hashes the key
+	// and would not share this value with the legacy Yii1 backend.
+	$key = "yiimpRpcNethash{$coin->id}";
+	$cached = controller()->memcache->get($key);
+	if (is_string($cached)) {
+		// Yii2 stores serialize([$value, $dependency]) under this key.
+		$decoded = @unserialize($cached);
+		if (is_array($decoded) && array_key_exists(0, $decoded)) {
+			$decoded = $decoded[0];
+		}
+		if ($decoded !== false) $cached = $decoded;
+	}
+	if ($cached !== false && $cached !== null && (float) $cached > 0) {
+		return (float) $cached;
+	}
+
+	$remote = new WalletRPC($coin);
+	if (!empty($remote->error)) return null;
+
+	$rate = null;
+	if (yaamp_is_nebhash_coin($coin)) {
+		$rate = yaamp_neb_network_hashrate($remote, 120);
+	} else if ($coin->rpcencoding === 'GETH') {
+		$rate = yaamp_geth_network_hashrate($remote);
+	} else {
+		$raw = $remote->getnetworkhashps(array(120, -1));
+		$rate = is_array($raw)
+			? (float) (isset($raw[$coin->algo]) ? $raw[$coin->algo] : 0)
+			: (float) $raw;
+
+		if ($rate <= 0) {
+			$info = $remote->getmininginfo();
+			if (is_array($info)) {
+				if (isset($info['networkhashps'])) {
+					$raw = $info['networkhashps'];
+					$rate = is_array($raw)
+						? (float) (isset($raw[$coin->algo]) ? $raw[$coin->algo] : 0)
+						: (float) $raw;
+				} elseif (isset($info['networkhps'])) {
+					$rate = (float) $info['networkhps'];
+				} elseif (isset($info['netmhashps'])) {
+					$rate = (float) $info['netmhashps'] * 1e6;
+				}
+			}
+		}
+	}
+
+	if ($rate > 0) {
+		controller()->memcache->set($key, serialize(array($rate, null)), $ttl);
+		return (float) $rate;
+	}
+
+	return null;
+}
+
 function yaamp_coin_nethash($coin , $coin_powlimit_bits = null , $coin_difficulty = null, $coin_reward = null, $coin_price = null) {
 
-	/*
-	$network_hash = controller()
-	->memcache
-	->get("yiimp-nethashrate-{$coin->symbol}");
-	if (!$network_hash)
-	{
-		$remote = new WalletRPC($coin);
-		if ($remote) $info = $remote->getmininginfo();
-		if (isset($info['networkhashps']))
-		{
-			$network_hash = $info['networkhashps'];
-			controller()
-				->memcache
-				->set("yiimp-nethashrate-{$coin->symbol}", $info['networkhashps'], 60);
-		}
-		else if (isset($info['netmhashps']))
-		{
-			$network_hash = floatval($info['netmhashps']) * 1e6;
-			controller()
-				->memcache
-				->set("yiimp-nethashrate-{$coin->symbol}", $network_hash, 60);
-		}
-		if ($network_hash) return $network_hash;
+	$rpc = yaamp_rpc_network_hashrate($coin);
+	if ($rpc !== null) return $rpc;
+
+	// NEB difficulty is already expected hashes per block; do not apply the
+	// Bitcoin 2^32 powlimit multiplier when the node RPC is unavailable.
+	if (yaamp_is_nebhash_coin($coin)) {
+		$blocktime = $coin->block_time ? $coin->block_time : max(min($coin->actual_ttf, 60), 30);
+		if ($coin->difficulty > 0 && $blocktime > 0) return $coin->difficulty / $blocktime;
+		return 0;
 	}
-	*/
 
     if (is_null($coin_powlimit_bits)) {
         if (!is_null($coin->powlimit_bits)) {
@@ -438,7 +601,7 @@ function yaamp_pool_rate($algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_pool_rate-$algo",
@@ -452,7 +615,7 @@ function yaamp_pool_shared_rate($algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_pool_shared_rate-$algo","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND algo=:algo AND solo=0", array(':algo'=>$algo));
@@ -464,7 +627,7 @@ function yaamp_pool_solo_rate($algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_pool_solo_rate-$algo","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND algo=:algo AND solo=1", array(':algo'=>$algo));
@@ -476,7 +639,7 @@ function yaamp_pool_rate_bad($algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_pool_rate_bad-$algo",
@@ -490,7 +653,7 @@ function yaamp_pool_rate_rentable($algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_pool_rate_rentable-$algo",
@@ -505,7 +668,7 @@ function yaamp_user_coin_rate($userid, $coinid)
 	if(!$coin || !$coin->enable) return 0;
 
 	$target = yaamp_hashrate_constant($coin->algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($coin->algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_user_rate-$userid-$coinid",
@@ -520,7 +683,7 @@ function yaamp_user_coin_shared_rate($userid, $coinid)
 	if(!$coin || !$coin->enable) return 0;
 
 	$target = yaamp_hashrate_constant($coin->algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($coin->algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_user_shared_rate-$userid-$coinid","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND userid=$userid AND coinid=$coinid AND solo=0");
@@ -533,7 +696,7 @@ function yaamp_user_coin_solo_rate($userid, $coinid)
 	if(!$coin || !$coin->enable) return 0;
 
 	$target = yaamp_hashrate_constant($coin->algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($coin->algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_user_solo_rate-$userid-$coinid","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND userid=$userid AND coinid=$coinid AND solo=1");
@@ -545,7 +708,7 @@ function yaamp_user_rate($userid, $algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_user_rate-$userid-$algo",
@@ -559,7 +722,7 @@ function yaamp_user_shared_rate($userid, $algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_user_shared_rate-$userid-$algo","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND userid=$userid AND algo=:algo AND solo=0", array(':algo'=>$algo));
@@ -571,7 +734,7 @@ function yaamp_user_solo_rate($userid, $algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_user_solo_rate-$userid-$algo","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND userid=$userid AND algo=:algo AND solo=1", array(':algo'=>$algo));
@@ -583,7 +746,7 @@ function yaamp_user_rate_bad($userid, $algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$diff = (double) controller()->memcache->get_database_scalar("yaamp_user_diff_avg-$userid-$algo",
@@ -600,7 +763,7 @@ function yaamp_worker_rate($workerid, $algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_worker_rate-$workerid-$algo",
@@ -614,7 +777,7 @@ function yaamp_worker_rate_bad($workerid, $algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$diff = (double) controller()->memcache->get_database_scalar("yaamp_worker_diff_avg-$workerid-$algo",
@@ -630,7 +793,7 @@ function yaamp_worker_shares_bad($workerid, $algo=null)
 {
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = (int) controller()->memcache->get_database_scalar("yaamp_worker_shares_bad-$workerid-$algo",
@@ -645,7 +808,7 @@ function yaamp_coin_rate($coinid)
 	if(!$coin || !$coin->enable) return 0;
 
 	$target = yaamp_hashrate_constant($coin->algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($coin->algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_coin_rate-$coinid",
@@ -660,7 +823,7 @@ function yaamp_coin_shared_rate($coinid)
 	if(!$coin || !$coin->enable) return 0;
 
 	$target = yaamp_hashrate_constant($coin->algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($coin->algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_coin_shared_rate-$coinid",
@@ -675,7 +838,7 @@ function yaamp_coin_solo_rate($coinid)
 	if(!$coin || !$coin->enable) return 0;
 
 	$target = yaamp_hashrate_constant($coin->algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($coin->algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_coin_solo_rate-$coinid",
@@ -689,7 +852,7 @@ function yaamp_rented_rate($algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_rented_rate-$algo",
@@ -704,7 +867,7 @@ function yaamp_job_rate($jobid)
 	if(!$job) return 0;
 
 	$target = yaamp_hashrate_constant($job->algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($job->algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_job_rate-$jobid",
@@ -718,7 +881,7 @@ function yaamp_job_rate_bad($jobid)
 	if(!$job) return 0;
 
 	$target = yaamp_hashrate_constant($job->algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($job->algo);
 	$delay = time()-$interval;
 
 	$diff = (double) controller()->memcache->get_database_scalar("yaamp_job_diff_avg-$jobid",
@@ -737,7 +900,7 @@ function yaamp_pool_rate_pow($algo=null)
 	if(!$algo) $algo = user()->getState('yaamp-algo');
 
 	$target = yaamp_hashrate_constant($algo);
-	$interval = yaamp_hashrate_step();
+	$interval = yaamp_hashrate_step($algo);
 	$delay = time()-$interval;
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_pool_rate_pow-$algo",

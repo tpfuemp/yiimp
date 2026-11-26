@@ -12,8 +12,8 @@ $vu = Yii::$app->ViewUtils;
 $route = $controller . '/' . $action;
 
 $active = function (string $url) use ($route, $hasAddress): bool {
-    if (strpos($url, '/?address=') !== false) {
-        return $route === 'site/index' && $hasAddress;
+    if ($url === '/wallet') {
+        return $route === 'site/wallet';
     }
     $path = trim(parse_url($url, PHP_URL_PATH) ?? '', '/');
     if ($path === '') return false;
@@ -39,9 +39,9 @@ $navLink = fn(string $icon, string $label, string $url, bool $isActive = false) 
 $publicNav = [
     ['home',     'Home',      '/site/index'],
     ['pool',     'Pool',      '/site/mining'],
-    ['wallet',   'Wallet',    '/?address='],
+    ['coins',    'Coins',     '/site/coins'],
+    ['wallet',   'Wallet',    '/wallet'],
     ['graphs',   'Graphs',    '/stats'],
-    ['miners',   'Miners',    '/site/miners'],
     ['api',      'API',       '/site/api'],
     ['explorer', 'Explorers', '/explorer'],
 ];

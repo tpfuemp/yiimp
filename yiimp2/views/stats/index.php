@@ -10,10 +10,24 @@
 
 use yii\helpers\Html;
 
+$this->registerJsFile('@web/js/auto_refresh.js', ['depends' => [yii\web\JqueryAsset::className()]]);
+
 $isTailwind = Yii::$app->LayoutManager->isTailwind();
 $isLegacy   = Yii::$app->LayoutManager->isLegacy();
 $height     = '240px';
 $au         = Html::encode($algoUnit);
+
+// Same algo scope control as /site/mining, built from the enabled/visible coins.
+$algoTabs   = [];
+foreach ($algos as $a => $count) {
+    $algoTabs[$a] = [
+        'label' => (string) $a,
+        'color' => Yii::$app->YiimpUtils->getAlgoColors($a),
+        'count' => (int) $count,
+    ];
+}
+$activeAlgo = array_key_exists($algo, $algoTabs) ? $algo : (array_key_first($algoTabs) ?? $algo);
+$activeColor = $algoTabs[$activeAlgo]['color'] ?? '#2c5aa0';
 
 $options = '';
 foreach ($algos as $a => $count) {
@@ -23,9 +37,9 @@ foreach ($algos as $a => $count) {
 
 // Three period columns — same structure, different graph IDs
 $periods = [
-    ['label' => 'Last 48 Hours', 'stats' => $stats1, 'graphs' => [1, 2, 3]],
-    ['label' => 'Last 7 Days',   'stats' => $stats2, 'graphs' => [4, 5, 6]],
-    ['label' => 'Last 30 Days',  'stats' => $stats3, 'graphs' => [7, 8, 9]],
+    ['id' => 1, 'label' => 'Last 48 Hours', 'stats' => $stats1, 'graphs' => [1, 2, 3]],
+    ['id' => 2, 'label' => 'Last 7 Days',   'stats' => $stats2, 'graphs' => [4, 5, 6]],
+    ['id' => 3, 'label' => 'Last 30 Days',  'stats' => $stats3, 'graphs' => [7, 8, 9]],
 ];
 
 $graphInits = [
@@ -46,6 +60,103 @@ $graphInits = [
 <!-- ══════════════════════════════════════════════════════════════════════════
      LEGACY
      ══════════════════════════════════════════════════════════════════════════ -->
+<style>
+/* ── Algo scope bar — identical to /site/mining ──────────────────────────── */
+.mining-algo-bar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: #fff; border: 1px solid #d8e2ef; border-radius: 8px;
+    padding: 12px 14px; margin: 12px 0 10px;
+    box-shadow: 0 1px 2px rgba(20,40,80,.04);
+}
+.mining-algo-label {
+    font-size: 10px; font-weight: 700; letter-spacing: .12em;
+    color: #8a94a6; text-transform: uppercase; white-space: nowrap;
+}
+.mining-algo-tabs {
+    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px;
+    flex: 1 1 420px;
+}
+.mining-algo-tab {
+    border: 1px solid #dfe5ec; background: #fafbfc; border-radius: 7px;
+    padding: 6px 11px; min-width: 96px; text-align: left; cursor: pointer;
+    font-family: inherit; line-height: 1.15; transition: .15s;
+}
+.mining-algo-tab:hover { border-color: var(--algo-color, #a9c4ea); background: #f7faff; }
+.mining-algo-tab b { display: block; font-size: 12px; color: #33405a; }
+.mining-algo-tab small { display: block; font-size: 10px; color: #8a94a6; margin-top: 2px; }
+.mining-algo-tab .dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin-right: 5px; vertical-align: 1px; background: var(--algo-color, #888);
+}
+.mining-algo-tab.active {
+    border-color: var(--algo-color, #2c5aa0);
+    background: #eef4ff;
+    box-shadow: inset 0 0 0 1px var(--algo-color, #2c5aa0);
+}
+.mining-algo-tab.active b { color: #1f467f; }
+.mining-algo-tab.active small { color: #4f74ad; }
+.mining-algo-live {
+    margin-left: auto; white-space: nowrap; font-size: 11px; color: #5b6675;
+    display: flex; align-items: center; gap: 6px;
+}
+.mining-algo-live i {
+    width: 7px; height: 7px; border-radius: 50%; background: #2fae5a;
+    box-shadow: 0 0 0 3px rgba(47,174,90,.15);
+}
+#stats-cards .main-left-box {
+    height: 100%; border: 1px solid #d8e2ef !important; border-radius: 7px !important;
+    box-shadow: 0 1px 2px rgba(20,40,80,.04); overflow: hidden; margin-bottom: 1rem;
+}
+#stats-cards .main-left-title {
+    display: flex !important; align-items: center; justify-content: space-between; gap: 10px;
+    min-height: 34px; padding: 9px 12px !important;
+    background: #f8fafc !important; border-bottom: 1px solid #e8eef6;
+    color: #26385a; font-size: 13px !important; font-weight: 800 !important; line-height: 1.3;
+}
+#stats-cards .st-head-main { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; min-width: 0; }
+#stats-cards .st-title { font-size: 13px; font-weight: 800; color: #26385a; }
+#stats-cards .st-sub { font-size: 10px; color: #8a94a6; font-weight: 500; }
+#stats-cards .st-chip {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    background: #eef4ff; border: 1px solid #d7e5ff; color: #2c5aa0;
+    font-size: 9px; font-weight: 700; white-space: nowrap;
+}
+#stats-cards .main-left-inner { padding: 0 !important; }
+#stats-cards .st-summary {
+    display: flex; gap: 18px; flex-wrap: wrap; padding: 8px 12px;
+    background: #fcfdff; border-bottom: 1px solid #eef2f7;
+    font-size: 10px; color: #8a94a6;
+}
+#stats-cards .st-summary b { color: #33405a; font-weight: 700; }
+#stats-cards .st-summary i {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: #2fae5a; box-shadow: 0 0 0 3px rgba(47,174,90,.12); margin-right: 5px;
+}
+#stats-cards .st-metrics { width: 100%; border-collapse: collapse; font-size: 11px; color: #334155; }
+#stats-cards .st-metrics th {
+    padding: 7px 12px; text-align: left; font-size: 9px; font-weight: 700;
+    letter-spacing: .05em; text-transform: uppercase; color: #8a94a6;
+    border-bottom: 1px solid #eef2f7; background: #fff;
+}
+#stats-cards .st-metrics td {
+    padding: 7px 12px; text-align: right; border-bottom: 1px solid #eef2f7;
+}
+#stats-cards .st-metrics tr:last-child th,
+#stats-cards .st-metrics tr:last-child td { border-bottom: 0; }
+#stats-cards .st-val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 700; color: #2b3d5b;
+}
+#stats-cards .graph-wrap { padding: 8px 12px 6px; }
+#stats-cards .graph-wrap + .graph-wrap { border-top: 1px solid #f1f5f9; }
+#stats-cards .st-foot {
+    padding: 7px 12px; background: #fcfdff; border-top: 1px solid #eef2f7;
+    color: #98a3b5; font-size: 9px; line-height: 1.5;
+    display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+}
+@media(max-width:820px){ #stats-cards .st-sub { display: none; } }
+</style>
+
 <div id="resume_update_button"
      style="color:#444;background:#ffd;border:1px solid #eea;padding:10px;
             margin:15px 20px;cursor:pointer;display:none;"
@@ -53,29 +164,52 @@ $graphInits = [
     <b>Auto refresh is paused — click to resume</b>
 </div>
 
-<div align="right" style="margin-bottom:6px;">
-    Select Algo: <select id="algo_select"><?= $options ?></select>&nbsp;
+<div id="stats-cards">
+<div class="mining-algo-bar" style="--algo-color: <?= Html::encode($activeColor) ?>">
+    <span class="mining-algo-label">Algorithm</span>
+    <div class="mining-algo-tabs" title="Click to select an algorithm">
+        <?php foreach ($algoTabs as $key => $item): ?>
+            <?php $color = Html::encode($item['color']); ?>
+            <button type="button" class="mining-algo-tab <?= $key === $activeAlgo ? 'active' : '' ?>"
+                    style="--algo-color: <?= $color ?>" data-algo="<?= Html::encode($key) ?>">
+                <b><i class="dot"></i><?= Html::encode($item['label']) ?></b>
+                <small data-algo-sub><?= $item['count'] ?> coin<?= $item['count'] === 1 ? '' : 's' ?></small>
+            </button>
+        <?php endforeach ?>
+    </div>
+    <span class="mining-algo-live"><i></i> live · 60s</span>
 </div>
 
-<div class="row gx-4">
+<div class="row gx-3 mt-2">
 <?php foreach ($periods as $p): ?>
     <div class="col-12 col-md-4">
-        <div class="main-left-box">
-            <div class="main-left-title"><?= Html::encode($p['label']) ?></div>
+        <div class="main-left-box" data-period="<?= (int) $p['id'] ?>">
+            <div class="main-left-title">
+                <span class="st-head-main"><span class="st-title"><?= Html::encode($p['label']) ?></span>
+                    <span class="st-sub">Network averages</span></span>
+                <span class="st-chip"><?= $au ?></span>
+            </div>
             <div class="main-left-inner">
-                <ul>
-                    <li>Average Hashrate: <b><?= Html::encode($p['stats']['hashrate']) ?>h/s</b></li>
-                    <li>BTC Value: <b><?= Html::encode($p['stats']['total']) ?></b></li>
-                    <li>BTC/<?= $au ?>/d: <b><?= Html::encode($p['stats']['btcPerMhd']) ?></b></li>
-                </ul>
+                <div class="st-summary">
+                    <span><i></i><b data-stat="hashrate"><?= Html::encode($p['stats']['hashrate']) ?></b>h/s average</span>
+                    <span><span data-stat="total"><?= Html::encode($p['stats']['total']) ?></span> BTC</span>
+                </div>
+                <table class="st-metrics"><tbody>
+                    <tr><th>Average Hashrate</th><td><span class="st-val" data-stat="hashrate"><?= Html::encode($p['stats']['hashrate']) ?></span>h/s</td></tr>
+                    <tr><th>BTC Value</th><td><span class="st-val" data-stat="total"><?= Html::encode($p['stats']['total']) ?></span></td></tr>
+                    <tr><th>BTC/<?= $au ?>/d</th><td><span class="st-val" data-stat="btcPerMhd"><?= Html::encode($p['stats']['btcPerMhd']) ?></span></td></tr>
+                </tbody></table>
                 <?php foreach ($p['graphs'] as $gid): ?>
-                <div id="graph_results_<?= $gid ?>"
-                     style="height:<?= $height ?>;<?= $gid !== $p['graphs'][0] ? 'margin-top:1rem;' : '' ?>"></div>
+                <div class="graph-wrap">
+                    <div id="graph_results_<?= $gid ?>" style="height:<?= $height ?>"></div>
+                </div>
                 <?php endforeach ?>
+                <div class="st-foot"><span>Hashrate · BTC/day · BTC/<?= $au ?>/day</span><span>Refresh 60s</span></div>
             </div>
         </div>
     </div>
 <?php endforeach ?>
+</div>
 </div>
 
 
@@ -101,7 +235,7 @@ $graphInits = [
 <div class="row gx-3">
 <?php foreach ($periods as $p): ?>
     <div class="col-12 col-md-4 mb-3">
-        <div class="card shadow-sm h-100">
+        <div class="card shadow-sm h-100" data-period="<?= (int) $p['id'] ?>">
             <div class="card-header py-2 d-flex align-items-center gap-2">
                 <strong class="small"><?= Html::encode($p['label']) ?></strong>
                 <span class="badge bg-light text-dark border font-monospace ms-1"><?= $au ?></span>
@@ -110,15 +244,15 @@ $graphInits = [
                 <ul class="list-unstyled small mb-3">
                     <li class="text-muted mb-1">
                         Hashrate
-                        <strong class="text-dark ms-1"><?= Html::encode($p['stats']['hashrate']) ?>h/s</strong>
+                        <strong class="text-dark ms-1" data-stat="hashrate"><?= Html::encode($p['stats']['hashrate']) ?></strong>h/s
                     </li>
                     <li class="text-muted mb-1">
                         BTC Value
-                        <strong class="text-dark ms-1 font-monospace"><?= Html::encode($p['stats']['total']) ?></strong>
+                        <strong class="text-dark ms-1 font-monospace" data-stat="total"><?= Html::encode($p['stats']['total']) ?></strong>
                     </li>
                     <li class="text-muted">
                         BTC/<?= $au ?>/d
-                        <strong class="text-dark ms-1 font-monospace"><?= Html::encode($p['stats']['btcPerMhd']) ?></strong>
+                        <strong class="text-dark ms-1 font-monospace" data-stat="btcPerMhd"><?= Html::encode($p['stats']['btcPerMhd']) ?></strong>
                     </li>
                 </ul>
                 <?php foreach ($p['graphs'] as $gid): ?>
@@ -160,7 +294,8 @@ $graphInits = [
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 <?php foreach ($periods as $p): ?>
     <div class="rounded-xl border border-gray-200 dark:border-gray-700
-                bg-white dark:bg-gray-800 shadow-sm overflow-hidden flex flex-col">
+                bg-white dark:bg-gray-800 shadow-sm overflow-hidden flex flex-col"
+         data-period="<?= (int) $p['id'] ?>">
 
         <div class="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700
                     flex items-center gap-2">
@@ -177,15 +312,15 @@ $graphInits = [
             <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs mb-4">
                 <dt class="text-gray-400 dark:text-gray-500">Hashrate</dt>
                 <dd class="text-right font-mono font-semibold text-gray-800 dark:text-gray-200">
-                    <?= Html::encode($p['stats']['hashrate']) ?>h/s
+                    <span data-stat="hashrate"><?= Html::encode($p['stats']['hashrate']) ?></span>h/s
                 </dd>
                 <dt class="text-gray-400 dark:text-gray-500">BTC Value</dt>
                 <dd class="text-right font-mono text-gray-700 dark:text-gray-300">
-                    <?= Html::encode($p['stats']['total']) ?>
+                    <span data-stat="total"><?= Html::encode($p['stats']['total']) ?></span>
                 </dd>
                 <dt class="text-gray-400 dark:text-gray-500">BTC/<?= $au ?>/d</dt>
                 <dd class="text-right font-mono text-gray-700 dark:text-gray-300">
-                    <?= Html::encode($p['stats']['btcPerMhd']) ?>
+                    <span data-stat="btcPerMhd"><?= Html::encode($p['stats']['btcPerMhd']) ?></span>
                 </dd>
             </dl>
 
@@ -205,6 +340,26 @@ $('#algo_select').change(function () {
     window.location.href = '/site/algo?algo=' + encodeURIComponent($('#algo_select').val()) + '&r=/stats';
 });
 
+$('#stats-cards .mining-algo-tab').on('click', function () {
+    window.location.href = '/site/algo?algo=' + encodeURIComponent($(this).data('algo')) + '&r=/stats';
+});
+
+function stats_summary_refresh() {
+    $.get('/stats/summary', '', function (d) {
+        if (!d) return;
+        Object.keys(d).forEach(function (period) {
+            var card = document.querySelector('[data-period="' + period + '"]');
+            if (!card) return;
+            ['hashrate', 'total', 'btcPerMhd'].forEach(function (key) {
+                if (d[period][key] === undefined) return;
+                card.querySelectorAll('[data-stat="' + key + '"]').forEach(function (el) {
+                    el.textContent = d[period][key];
+                });
+            });
+        });
+    });
+}
+
 function page_refresh() {
     for (var i = 1; i <= 9; i++) {
         (function (n) {
@@ -213,6 +368,7 @@ function page_refresh() {
             });
         })(i);
     }
+    stats_summary_refresh();
 }
 
 <?php foreach ($graphInits as $n => $body): ?>

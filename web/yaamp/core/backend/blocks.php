@@ -106,18 +106,22 @@ function BackendBlockNew($coin, $db_block)
 
 			$user->last_earning = time();
 			$user->save();
-
-			$last_shared = dborow("SELECT height, time FROM blocks " . "WHERE coin_id=:id AND solo=0 AND category IN ('immature','generate') ORDER BY height DESC LIMIT 1", array(':id' => $coin->id));
-			$timelast_shared = (int) arraySafeVal($last_shared, 'time');
-      
-			$total_shared_difficulty = dboscalar("SELECT SUM(difficulty) FROM shares WHERE coinid=:coinid AND algo=:algo AND solo=0 AND time>=$timelast_shared", array(':algo'=>$coin->algo,':coinid'=>$coin->id));
-			$share_difficulty = block_difficulty_for_shares($coin, $db_block->difficulty);
-			$effort = $share_difficulty > 0 ? round($total_shared_difficulty * 100 / $share_difficulty, 2) : 0;
-			$db_block->effort = $effort;
-			
-			$db_block->solo = 0;
-			$db_block->save();
 		}
+
+		// Effort must use the same share window as the reward distribution.
+		// A time-based "previous block" lookup is unreliable here: stratum
+		// inserts the current block row with solo=0 before the backend runs,
+		// so it would select itself and count only shares from the next round.
+		$total_shared_difficulty = dboscalar(
+			"SELECT SUM(difficulty) FROM shares WHERE algo=:algo AND solo=0 AND $sqlCond",
+			array(':algo'=>$coin->algo)
+		);
+		$share_difficulty = block_difficulty_for_shares($coin, $db_block->difficulty);
+		$db_block->effort = ($share_difficulty > 0 && $total_shared_difficulty)
+			? round($total_shared_difficulty * 100 / $share_difficulty, 2)
+			: 0;
+		$db_block->solo = 0;
+		$db_block->save();
 	}
 	else 
 	{
@@ -164,15 +168,16 @@ function BackendBlockNew($coin, $db_block)
 
 		$user->last_earning = time();
 		$user->save();
-		
-		$last_solo = dborow("SELECT height, time FROM blocks " . "WHERE coin_id=:id AND solo=1 AND category IN ('immature','generate') ORDER BY height DESC LIMIT 1", array(':id' => $coin->id));
-		$timelast_solo = (int) arraySafeVal($last_solo, 'time');
-      
-		$total_solo_difficulty = dboscalar("SELECT SUM(difficulty) FROM shares WHERE coinid=:coinid AND algo=:algo AND solo=1 AND time>=$timelast_solo", array(':algo'=>$coin->algo,':coinid'=>$coin->id));
+
+		// Same share window as the solo reward calculation (see above).
+		$total_solo_difficulty = dboscalar(
+			"SELECT SUM(difficulty) FROM shares WHERE algo=:algo AND solo=1 AND valid=1 AND $sqlCond",
+			array(':algo'=>$coin->algo)
+		);
 		$share_difficulty = block_difficulty_for_shares($coin, $db_block->difficulty);
-		$effort = $share_difficulty > 0 ? round($total_solo_difficulty * 100 / $share_difficulty, 2) : 0;
-		$db_block->effort = $effort;
-		
+		$db_block->effort = ($share_difficulty > 0 && $total_solo_difficulty)
+			? round($total_solo_difficulty * 100 / $share_difficulty, 2)
+			: 0;
 		$db_block->solo = 1;
 		$db_block->save();
 	}
@@ -239,7 +244,19 @@ function BackendBlockFind1($coinid = NULL)
 			if (!$tx || !isset($tx['details'])) continue;
 			debuglog("{$coin->symbol} {$db_block->height} confirmed after ".$block_age." seconds");
 		}
-		else if(!$block || !isset($block['tx']) || !isset($block['tx'][0]))
+		else if(!$block)
+		{
+			$db_block->amount = 0;
+			$db_block->save();
+			debuglog("{$coin->symbol} orphan {$db_block->height} after ".(time() - $db_block->time)." seconds");
+			continue;
+		}
+		else if($coin->rpcencoding == 'GETH')
+		{
+			// Ethereum PoW has no coinbase tx; WalletRPC synthesizes one from
+			// the coin reward when given the block hash.
+		}
+		else if(!isset($block['tx']) || !isset($block['tx'][0]))
 		{
 			$db_block->amount = 0;
 			$db_block->save();
@@ -252,7 +269,11 @@ function BackendBlockFind1($coinid = NULL)
 			continue;
 		}
 
-		$tx = $remote->gettransaction($block['tx'][0]);
+		$txid = ($coin->rpcencoding == 'GETH') ? $block['hash'] : $block['tx'][0];
+		if ($coin->algo === 'nebhash')
+			$tx = $remote->gettransaction($txid, $db_block->height);
+		else
+			$tx = $remote->gettransaction($txid);
 		if(!$tx || !isset($tx['details']) || !isset($tx['details'][0]))
 		{
 			$db_block->amount = 0;
@@ -260,7 +281,7 @@ function BackendBlockFind1($coinid = NULL)
 			continue;
 		}
 
-		$db_block->txhash = $block['tx'][0];
+		$db_block->txhash = $txid;
 		$db_block->category = 'immature';						//$tx['details'][0]['category'];
 		$db_block->amount = $tx['details'][0]['amount'];
 		$db_block->confirmations = $tx['confirmations'];
@@ -321,14 +342,21 @@ function BackendBlocksUpdate($coinid = NULL)
 				$block->save();
 			}
 
-			if(!$blockext || !isset($blockext['tx'][0])) continue;
-
-			$block->txhash = $blockext['tx'][0];
+			if ($coin->rpcencoding == 'GETH') {
+				if (!$blockext) continue;
+				$block->txhash = $blockext['hash'];
+			} else {
+				if(!$blockext || !isset($blockext['tx'][0])) continue;
+				$block->txhash = $blockext['tx'][0];
+			}
 
 			if(empty($block->txhash)) continue;
 		}
 
-		$tx = $remote->gettransaction($block->txhash);
+		if ($coin->algo === 'nebhash')
+			$tx = $remote->gettransaction($block->txhash, $block->height);
+		else
+			$tx = $remote->gettransaction($block->txhash);
 		if(!$tx && $block->category != 'orphan') {
 			if ($coin->enable) {
 				debuglog("{$coin->name} unable to find {$block->category} block {$block->height} tx {$block->txhash}!");
@@ -441,10 +469,24 @@ function BackendBlockFind2($coinid = NULL)
 				(is_array($list) ? count($list) : 0). "txs");
 		if(!$list) continue;
 
-		foreach($list['transactions'] as $transaction)
+		// listsinceblock returns newest-first. Distribute older blocks first so
+		// their shares are not swallowed by a newer block's reward window.
+		$transactions = isset($list['transactions']) ? $list['transactions'] : array();
+		usort($transactions, function($a, $b)
+		{
+			$ta = (int)(isset($a['time'])? $a['time']: 0);
+			$tb = (int)(isset($b['time'])? $b['time']: 0);
+			if($ta == $tb) return strcmp((string)(isset($a['blockhash'])? $a['blockhash']: ''),
+				(string)(isset($b['blockhash'])? $b['blockhash']: ''));
+			return ($ta < $tb)? -1: 1;
+		});
+
+		foreach($transactions as $transaction)
 		{
 			if(!isset($transaction['blockhash'])) continue;
-			if($transaction['time'] > time() - 5*60) continue;
+			// Show newly found blocks on the web as soon as the wallet sees
+			// them; getblock()/gettransaction() below still validate the block.
+			if($transaction['time'] > time() - 15) continue;
 			if($transaction['time'] < time() - 60*60) continue;
 			if($transaction['category'] != 'generate' && $transaction['category'] != 'immature') continue;
 
@@ -474,17 +516,33 @@ function BackendBlockFind2($coinid = NULL)
 			$db_block->amount = (isset($transaction['amount']))? $transaction['amount'] : 0;
 			$db_block->algo = $coin->algo;
 
+			// Wallet scans do not know which worker found the block. Recover
+			// the finder from the highest-difficulty valid share in the round
+			// so the web page can show it (blocks injected by stratum already
+			// carry userid/workerid and are left alone).
+			if (empty($db_block->userid)) {
+				$finder = dbolist("SELECT userid, workerid FROM shares WHERE coinid=:coin AND algo=:algo AND valid=1 AND time <= :time ".
+					"ORDER BY difficulty DESC LIMIT 1", array(
+					':coin'=>$coin->id, ':algo'=>$coin->algo, ':time'=>$db_block->time
+				));
+				if (!empty($finder)) {
+					$db_block->userid = (int) $finder[0]['userid'];
+					$db_block->workerid = (int) $finder[0]['workerid'];
+				}
+			}
+
 			if (arraySafeVal($blockext,'nonce',0) != 0) {
 				if ($coin->algo == 'homescrypt') {
-					// Lumenite's block hash is SHA256d, not the HomeScrypt PoW digest:
-					// use the best share difficulty of the round
+					// Lumenite's block hash is SHA256d, not the HomeScrypt PoW
+					// digest, so hash_to_difficulty() is meaningless here.
 					$shareDiff = dboscalar("SELECT MAX(share_diff) FROM shares WHERE coinid=:coin AND algo=:algo ".
 						"AND valid=1 AND blocknumber<=:h AND blockrewarded IS NULL", array(
 						':coin'=>$coin->id, ':algo'=>$coin->algo, ':h'=>(int)$blockext['height']
 					));
 					$db_block->difficulty_user = (float) $shareDiff ?: (float) $coin->difficulty;
-				} else
+				} else {
 					$db_block->difficulty_user = hash_to_difficulty($coin, $transaction['blockhash']);
+				}
 			} else if (($coin->rpcencoding == 'POS') && (arraySafeVal($blockext,'flags') == 'proof-of-stake')) {
 				$db_block->category = 'stake';
 			}

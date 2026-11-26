@@ -63,12 +63,31 @@ class SiteController extends BaseController
      */
     public function actionIndex()
     {
-        $address = Yii::$app->getRequest()->getQueryParam('address');
-        
-        if (!is_null($address))
-            return $this->render('wallet');
-        else
-            return $this->render('index', ['tlsPorts' => $this->buildTlsPortMap()]);
+        $request = Yii::$app->getRequest();
+        $address = $request->getQueryParam('address');
+
+        // Legacy /?address=ADDR and /?address= move to /wallet/ADDR and /wallet.
+        if ($address !== null) {
+            $url = Yii::$app->YiimpUtils->walletUrl($address);
+            $query = $request->getQueryParams();
+            unset($query['address']);
+            if ($query) $url .= '?' . http_build_query($query);
+            return $this->redirect($url, 301);
+        }
+
+        return $this->render('index', [
+            'tlsPorts' => $this->buildTlsPortMap(),
+            'algoNav'  => $this->buildMiningAlgoNav(),
+        ]);
+    }
+
+    /**
+     * Wallet page. The URL rule supplies `address` for /wallet/ADDR;
+     * /wallet alone renders the empty/recent-wallets view.
+     */
+    public function actionWallet()
+    {
+        return $this->render('wallet');
     }
 
     /**
@@ -99,7 +118,123 @@ class SiteController extends BaseController
      */
     public function actionMining()
     {
-        return $this->render('mining');
+        return $this->render('mining', ['algoNav' => $this->buildMiningAlgoNav()]);
+    }
+
+    /**
+     * Public coin catalog — searchable cards for every minable coin.
+     */
+    public function actionCoins(): string
+    {
+        $coins = Coins::find()
+            ->where(['enable' => 1, 'visible' => 1])
+            ->orderBy(['algo' => SORT_ASC, 'name' => SORT_ASC])
+            ->all();
+
+        return $this->render('coins', ['coins' => $coins]);
+    }
+
+    /**
+     * JSON version of the mining algo scope bar, refreshed with the page.
+     */
+    public function actionMining_summary(): Response
+    {
+        return $this->asJson($this->buildMiningAlgoNav());
+    }
+
+    /**
+     * Small summary used by the algo scope bar on /site/mining.
+     *
+     * @return array{active:string,items:array<string,array<string,mixed>>}
+     */
+    private function buildMiningAlgoNav(): array
+    {
+        $util     = Yii::$app->YiimpUtils;
+        $conv     = Yii::$app->ConversionUtils;
+        $active   = (string) Yii::$app->session->get('yaamp-algo', 'all');
+        $tlsPorts = $this->buildTlsPortMap();
+
+        $items        = [];
+        $totalWorkers = 0;
+        $totalPoolHash = 0.0;
+
+        foreach ($util->get_algos(true) ?: [] as $algo) {
+            // Bar membership follows the coin flags (enable + visible).
+            // auto_ready is about auto-exchange and must not hide an algo here.
+            $coins = Coins::find()
+                ->where(['enable' => 1, 'visible' => 1, 'algo' => $algo])
+                ->all();
+            if (!$coins) continue;
+
+            $workers = (int) \app\models\Workers::find()->where(['algo' => $algo])->count();
+            $stratum = \app\models\Stratums::find()->where(['algo' => $algo])->one();
+
+            // Coins for the command generator. auto_ready is intentionally not
+            // checked here — it controls auto-exchange, not miner availability.
+            $coinData = [];
+            foreach ($coins as $coin) {
+                $symbol = (string) $coin->getOfficialSymbol();
+                $portRow = \app\models\Stratums::find()
+                    ->where(['symbol' => $symbol, 'algo' => $algo])->one();
+                $coinData[] = [
+                    'symbol'      => $symbol,
+                    'name'        => (string) $coin->name,
+                    'algo'        => $algo,
+                    'port'        => $portRow ? (int) $portRow->port : (int) ($stratum->port ?? 0),
+                    'tls_port'    => (int) ($tlsPorts[$algo] ?? 0),
+                    'no_exchange' => isset($coin->auto_exchange) && $coin->auto_exchange == 0,
+                ];
+            }
+
+            $poolHash   = 0.0;
+            $networkHash = 0.0;
+            foreach ($coins as $coin) {
+                $poolHash += (float) $util->coin_rate($coin->id);
+                $hash = $util->display_network_hashrate($coin);
+                if ($hash !== null && (float) $hash > $networkHash) {
+                    $networkHash = (float) $hash;
+                }
+            }
+
+            $items[$algo] = [
+                'algo'         => $algo,
+                'label'        => $algo,
+                'color'        => $util->getAlgoColors($algo),
+                'port'         => $stratum ? (int) $stratum->port : 0,
+                'workers'      => $workers,
+                'pool_hash'    => $poolHash > 0 ? $conv->Itoa2($poolHash) . 'h/s' : '0 h/s',
+                'network_hash' => $networkHash > 0 ? strtoupper($conv->Itoa2($networkHash)) . 'H/s' : '—',
+                'coins'        => $coinData,
+            ];
+
+            $totalWorkers  += $workers;
+            $totalPoolHash += $poolHash;
+        }
+
+        if ($active !== 'all' && !isset($items[$active])) {
+            $active = 'all';
+        }
+
+        $allCoins = [];
+        foreach ($items as $item) {
+            $allCoins = array_merge($allCoins, $item['coins']);
+        }
+
+        $all = [
+            'algo'         => 'all',
+            'label'        => 'All',
+            'color'        => '#6c757d',
+            'port'         => 0,
+            'workers'      => $totalWorkers,
+            'pool_hash'    => $totalPoolHash > 0 ? $conv->Itoa2($totalPoolHash) . 'h/s' : '0 h/s',
+            'network_hash' => '—',
+            'coins'        => $allCoins,
+        ];
+
+        return [
+            'active' => $active,
+            'items'  => array_merge(['all' => $all], $items),
+        ];
     }
 
     /**
@@ -411,9 +546,11 @@ class SiteController extends BaseController
 		$data = $this->buildDiffData();
 		Yii::$app->response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
 
+		$partial = Yii::$app->LayoutManager->isLegacy() ? 'diff_live_legacy' : 'diff_live';
+
 		return $this->asJson([
 			'generated' => gmdate('Y-m-d H:i:s', $data['now']),
-			'html'      => $this->renderPartial('diff_live', $data),
+			'html'      => $this->renderPartial($partial, $data),
 		]);
 	}
 
@@ -546,9 +683,11 @@ class SiteController extends BaseController
      *
      * @return string
      */
-    public function actionMiners(): string
+    public function actionMiners(): Response
 	{
-		return $this->render('miners');
+		$base = defined('YIIMP_SITE_URL') ? trim(YIIMP_SITE_URL) : Yii::$app->request->hostInfo;
+		if ($base !== '' && !preg_match('#^https?://#i', $base)) $base = 'https://' . $base;
+		return $this->redirect(rtrim($base, '/') . '/site/mining');
 	}
 
 	public function actionMiners_results(): string
@@ -569,9 +708,6 @@ class SiteController extends BaseController
 			$algoFactor == 1000000000 => 'Ph',
 			default                   => 'Mh',
 		};
-
-		$interval = $util->hashrate_step();
-		$delay    = time() - $interval;
 
 		// "All" scope must match the Algorithm bar: only algos backed by
 		// enabled + visible coins. Recent hashrate history alone must not add
@@ -607,27 +743,15 @@ class SiteController extends BaseController
 
 		// ── Collect per-algo data (one set of cached queries per algo) ────────
 		foreach ($algos as $itemAlgo) {
-			$target = $util->hashrate_constant($itemAlgo);
+			$target   = $util->hashrate_constant($itemAlgo);
+			// NEB uses a 600s window; using the generic 300s here doubled its
+			// displayed miner-version and total hashrate.
+			$interval = $util->hashrate_step($itemAlgo);
+			$delay    = time() - $interval;
 
 			$wQuery = (new \yii\db\Query())->from('workers')->where(['algo' => $itemAlgo]);
 			$totalWorkers    += (int) (clone $wQuery)->count();
 			$totalExtranonce += (int) (clone $wQuery)->andWhere(['subscribe' => 1])->count();
-
-			$totalHashrate += (float) $cache->getOrSet("current_hashrate-{$itemAlgo}", function () use ($db, $itemAlgo) {
-				return $db->createCommand(
-					"SELECT hashrate FROM hashrate WHERE algo=:a ORDER BY time DESC LIMIT 1",
-					[':a' => $itemAlgo]
-				)->queryScalar() ?: 0.0;
-			}, 60);
-
-			if ($isAdmin) {
-				$totalInvalid += (float) $cache->getOrSet("current_hashrate_bad-{$itemAlgo}", function () use ($db, $itemAlgo) {
-					return $db->createCommand(
-						"SELECT hashrate_bad FROM hashrate WHERE algo=:a ORDER BY time DESC LIMIT 1",
-						[':a' => $itemAlgo]
-					)->queryScalar() ?: 0.0;
-				}, 60);
-			}
 
 			foreach ($db->createCommand(
 				"SELECT version, COUNT(*) AS c, SUM(subscribe) AS s FROM workers WHERE algo=:a GROUP BY version ORDER BY c DESC",
@@ -637,7 +761,7 @@ class SiteController extends BaseController
 				$versionCounts[] = $row;
 			}
 
-			$versionRatesAll[$itemAlgo] = $cache->getOrSet("miners-rates-{$itemAlgo}", function () use ($db, $target, $interval, $delay, $itemAlgo) {
+			$versionRatesAll[$itemAlgo] = $cache->getOrSet("miners-rates-v2-{$itemAlgo}", function () use ($db, $target, $interval, $delay, $itemAlgo) {
 				$rows = $db->createCommand(
 					"SELECT w.version,
 					        SUM(CASE WHEN s.valid=1 THEN s.difficulty ELSE 0 END) * :t / :iv / 1000 AS hashrate,
@@ -653,6 +777,13 @@ class SiteController extends BaseController
 				}
 				return $map;
 			}, 60);
+
+			// Derive displayed totals from the same fresh shares data as the rows;
+			// the hashstats table is only written every 15 minutes.
+			foreach ($versionRatesAll[$itemAlgo] as $rates) {
+				$totalHashrate += (float) $rates['hashrate'];
+				$totalInvalid  += (float) $rates['invalid'];
+			}
 
 			foreach ($db->createCommand(
 				"SELECT w.version, COUNT(*) AS d FROM workers w
@@ -792,13 +923,17 @@ class SiteController extends BaseController
     // Pool tab: graph algo pool hashrate (json data)
 	public function actionGraph_hashrate_results()
 	{
-		return $this->renderPartialAlgoMemcached('results/graph_hashrate_results');
+		$algo  = (string) Yii::$app->session->get('yaamp-algo', 'all');
+		$algos = $algo === 'all' ? $this->activeMiningAlgos() : [$algo];
+		return $this->renderPartialAlgoMemcached('results/graph_hashrate_results', 15, ['algos' => $algos]);
 	}
 
     // Pool tab: graph algo estimate history (json data)
 	public function actionGraph_price_results()
 	{
-		return $this->renderPartialAlgoMemcached('results/graph_price_results');
+		$algo  = (string) Yii::$app->session->get('yaamp-algo', 'all');
+		$algos = $algo === 'all' ? $this->activeMiningAlgos() : [$algo];
+		return $this->renderPartialAlgoMemcached('results/graph_price_results', 15, ['algos' => $algos]);
 	}
 
    	public function actionWallet_results()
@@ -854,9 +989,37 @@ class SiteController extends BaseController
 
 	public function actionBlock()
 	{
-		$id   = (int) Yii::$app->request->get('id');
-		$coin = $id ? Coins::findOne($id) : null;
-		return $this->render('block', ['coin' => $coin, 'id' => $id]);
+		$request = Yii::$app->request;
+		$id      = (int) $request->get('id');
+		$symbol  = trim((string) $request->get('symbol', ''));
+		$coin    = null;
+
+		if ($id) {
+			$coin = Coins::findOne($id);
+		} elseif ($symbol !== '') {
+			$symbol = strtoupper($symbol);
+			$coin   = Coins::find()
+				->where(['symbol' => $symbol])
+				->orWhere(['symbol2' => $symbol])
+				->one();
+			if (!$coin && ctype_digit($symbol)) {
+				$coin = Coins::findOne((int) $symbol);
+			}
+		}
+
+		// Legacy /site/block?id=N links keep working but move to /coins/SYMBOL.
+		if ($coin && ltrim($request->getPathInfo(), '/') === 'site/block') {
+			$query = $request->getQueryParams();
+			unset($query['id'], $query['symbol']);
+			$url = Coins::blockUrl($coin->getOfficialSymbol(), (int) $coin->id);
+			if ($query) $url .= '?' . http_build_query($query);
+			return $this->redirect($url, 301);
+		}
+
+		return $this->render('block', [
+			'coin' => $coin,
+			'id'   => $coin ? (int) $coin->id : $id,
+		]);
 	}
 
 	public function actionBlock_results()
@@ -916,7 +1079,7 @@ class SiteController extends BaseController
 		return $this->redirect(['/site/mining']);
 	}
 
-    protected function renderPartialAlgoMemcached($partial, $cachetime=15)
+    protected function renderPartialAlgoMemcached($partial, $cachetime=15, $params=[])
 	{
 		$algo = Yii::$app->session->get('yaamp-algo')?:'all';
 		$memcache = Yii::$app->cache;
@@ -927,10 +1090,22 @@ class SiteController extends BaseController
 			return $html;
 		}
 
-		$html = $this->renderPartial($partial);
+		$html = $this->renderPartial($partial, $params);
 		$memcache->set($memkey, $html, $cachetime);
 
         return $html;
+	}
+
+	/** Algos backed by enabled + visible coins, matching the Algorithm bar. */
+	private function activeMiningAlgos(): array
+	{
+		$algos = [];
+		foreach (Yii::$app->YiimpUtils->get_algos(true) ?: [] as $algo) {
+			if (Coins::find()->where(['enable' => 1, 'visible' => 1, 'algo' => $algo])->exists()) {
+				$algos[] = $algo;
+			}
+		}
+		return $algos;
 	}
 
 }

@@ -39,6 +39,181 @@ class Coins extends ActiveRecord
     }
 
     /**
+     * Network hashrate read directly from the coin daemon, cached for 60s.
+     *
+     * Bitcoin-like nodes expose getnetworkhashps / getmininginfo. Geth has no
+     * equivalent RPC, so derive it from the latest block difficulty divided by
+     * the timestamp gap to the previous block.
+     *
+     * Returns null when RPC is unavailable or the daemon cannot report a value.
+     */
+    public function getRpcNetworkHashrate(int $ttl = 60): ?float
+    {
+        if (empty($this->rpchost)) {
+            return null;
+        }
+
+        // Keep the key alphanumeric so Yii2's Cache::buildKey() does not hash
+        // it; the legacy Yii1 backend writes the same raw memcache key.
+        $cacheKey = "yiimpRpcNethash{$this->id}";
+        $cached   = Yii::$app->cache->get($cacheKey);
+        if ($cached !== false && $cached !== null && (float) $cached > 0) {
+            return (float) $cached;
+        }
+
+        $remote = new WalletRPC($this);
+        if ($remote->error !== null) {
+            return null;
+        }
+
+        $rate = null;
+
+        if ($this->isNebhash()) {
+            $rate = $this->nebNetworkHashrate($remote, 120);
+        } elseif ($this->rpcencoding === 'GETH') {
+            $rate = $this->gethNetworkHashrate($remote);
+        } else {
+            $raw = $remote->getnetworkhashps([120, -1]);
+            $rate = is_array($raw)
+                ? (float) ($raw[$this->algo] ?? 0)
+                : (float) $raw;
+
+            if ($rate <= 0) {
+                $info = $remote->getmininginfo();
+                if (is_array($info)) {
+                    if (isset($info['networkhashps'])) {
+                        $raw = $info['networkhashps'];
+                        $rate = is_array($raw)
+                            ? (float) ($raw[$this->algo] ?? 0)
+                            : (float) $raw;
+                    } elseif (isset($info['networkhps'])) {
+                        $rate = (float) $info['networkhps'];
+                    } elseif (isset($info['netmhashps'])) {
+                        $rate = (float) $info['netmhashps'] * 1e6;
+                    }
+                }
+            }
+        }
+
+        if ($rate > 0) {
+            Yii::$app->cache->set($cacheKey, $rate, $ttl);
+            return (float) $rate;
+        }
+
+        return null;
+    }
+
+    public function isNebhash(): bool
+    {
+        return $this->algo === 'nebhash' || $this->symbol === 'NEB';
+    }
+
+    /**
+     * NEB nodes expose no getnetworkhashps RPC. Its compact bits are
+     * (shift << 24) | mantissa, target = mantissa << shift, so expected
+     * hashes per block = 2^(256-shift)/mantissa. Average that over the
+     * last 120 blocks, like getnetworkhashps does for Bitcoin-like chains.
+     */
+    private function nebNetworkHashrate(WalletRPC $remote, int $blocks = 120): ?float
+    {
+        $tip = (int) $remote->getblockcount();
+        if ($tip <= 0 || $remote->error !== null) {
+            return null;
+        }
+
+        $blocks = max(1, min($blocks, $tip));
+        $start  = $tip - $blocks;
+
+        $sum     = 0.0;
+        $firstTs = null;
+        $lastTs  = null;
+
+        for ($h = $start; $h <= $tip; $h++) {
+            $hash = $remote->getblockhash($h);
+            if (!$hash || $remote->error !== null) {
+                return null;
+            }
+
+            $block = $remote->getblock($hash, true);
+            if ((!is_array($block) && !is_object($block)) || $remote->error !== null) {
+                return null;
+            }
+
+            $bits = (int) (is_object($block) ? ($block->bits ?? 0) : ($block['bits'] ?? 0));
+            $time = (int) (is_object($block) ? ($block->time ?? 0) : ($block['time'] ?? 0));
+            $shift    = ($bits >> 24) & 0xff;
+            $mantissa = $bits & 0x00ffffff;
+            if ($mantissa <= 0 || $shift > 255 || $time <= 0) {
+                return null;
+            }
+
+            $sum += pow(2.0, 256 - $shift) / $mantissa;
+            if ($firstTs === null) $firstTs = $time;
+            $lastTs = $time;
+        }
+
+        $span = $lastTs - $firstTs;
+        if ($span <= 0) {
+            return null;
+        }
+
+        return $sum / $span;
+    }
+
+    private function gethNetworkHashrate(WalletRPC $remote): ?float
+    {
+        $latest = $remote->eth_getBlockByNumber('latest', false);
+        if (!is_object($latest) && !is_array($latest)) {
+            return null;
+        }
+
+        $field = static function ($block, string $key): mixed {
+            if (is_object($block)) return $block->$key ?? null;
+            return is_array($block) ? ($block[$key] ?? null) : null;
+        };
+
+        $height = $this->rpcHexToNumber($field($latest, 'number'));
+        if ($height <= 0) {
+            return null;
+        }
+
+        // A single block gap is very noisy. Match getnetworkhashps' 120-block
+        // window so the Geth estimate is stable across lucky/unlucky blocks.
+        $blocks   = min(120, (int) $height);
+        $previous = $remote->eth_getBlockByNumber('0x' . dechex((int) $height - $blocks), false);
+        if (!is_object($previous) && !is_array($previous)) {
+            return null;
+        }
+
+        $difficulty = $this->rpcHexToNumber($field($latest, 'difficulty'));
+        $gap        = $this->rpcHexToNumber($field($latest, 'timestamp'))
+                    - $this->rpcHexToNumber($field($previous, 'timestamp'));
+
+        if ($difficulty <= 0 || $gap <= 0) {
+            return null;
+        }
+
+        return $difficulty / ($gap / $blocks);
+    }
+
+    private function rpcHexToNumber(mixed $value): float
+    {
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        $value = (string) $value;
+        if (str_starts_with($value, '0x')) {
+            $value = substr($value, 2);
+        }
+        if ($value !== '' && preg_match('/^[0-9a-f]+$/i', $value)) {
+            return (float) hexdec($value);
+        }
+
+        return 0.0;
+    }
+
+    /**
      * Live peer/node lines for the block explorer. The wallet_info cache does
      * not contain peers, so query the daemon directly like the legacy page did.
      */
@@ -59,24 +234,8 @@ class Coins extends ActiveRecord
             return [];
         }
 
-        if ($this->rpcencoding === 'GETH') {
-            // Geth usually disables admin_peers over the public RPC port; show
-            // the peer count and client string instead of an empty node list.
-            $lines = [];
-            $count = $remote->net_peerCount();
-            if (is_string($count) && preg_match('/^0x[0-9a-f]+$/i', $count)) {
-                $count = hexdec($count);
-            }
-            if ($count !== false && $count !== null) {
-                $lines[] = 'Peer count: ' . (int) $count;
-            }
-            $version = $remote->web3_clientVersion();
-            if (is_string($version) && $version !== '') {
-                $lines[] = 'Client: ' . $version;
-            }
-            return $lines;
-        }
-
+        // Geth now goes through the same path: WalletRPC maps admin_peers (or
+        // falls back to a synthetic peer-count row when admin is disabled).
         $list = $remote->getpeerinfo();
         if (!is_array($list)) {
             return [];
@@ -89,7 +248,24 @@ class Coins extends ActiveRecord
             if ($addr === '' || $this->isLocalPeerAddress($addr)) {
                 continue;
             }
+            if (is_array($peer) && !empty($peer['synthetic'])) {
+                continue; // informational "Peer count: N", not an address
+            }
             $lines[] = $prefix . $addr;
+        }
+
+        if (empty($lines) && $this->rpcencoding === 'GETH') {
+            $count = $remote->net_peerCount();
+            if (is_string($count) && preg_match('/^0x[0-9a-f]+$/i', $count)) {
+                $count = hexdec($count);
+            }
+            if ($count !== false && $count !== null) {
+                $lines[] = 'Peer count: ' . (int) $count;
+            }
+            $version = $remote->web3_clientVersion();
+            if (is_string($version) && $version !== '') {
+                $lines[] = 'Client: ' . $version;
+            }
         }
 
         sort($lines, SORT_STRING);
@@ -157,6 +333,27 @@ class Coins extends ActiveRecord
 	public function imageUrl(): string
 	{
 		return self::imageUrlFor($this->attributes);
+	}
+
+	/**
+	 * Canonical public block page URL: /coins/SYMBOL.
+	 *
+	 * Keep this in one place so every listing (mining, history, admin) agrees.
+	 * Numeric/empty symbols fall back to /coins/<id>, which actionBlock()
+	 * resolves just like a symbol-only route.
+	 */
+	public static function blockUrl($symbol, int $id = 0): string
+	{
+		$symbol = trim((string) $symbol);
+		if ($symbol === '' || is_numeric($symbol)) {
+			return '/coins/' . (int) $id;
+		}
+		return '/coins/' . rawurlencode($symbol);
+	}
+
+	public function getBlockUrl(): string
+	{
+		return static::blockUrl($this->getOfficialSymbol(), (int) $this->id);
 	}
 
 	/**

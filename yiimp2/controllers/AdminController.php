@@ -193,7 +193,7 @@ class AdminController extends BaseController
 
         $util     = Yii::$app->YiimpUtils;
         $target   = $util->hashrate_constant($algo);
-        $interval = $util->hashrate_step();
+        $interval = $util->hashrate_step($algo);
         $delay    = time() - $interval;
 
         // Single query: worker count + valid/invalid hashrate per version
@@ -256,7 +256,7 @@ class AdminController extends BaseController
         $util     = Yii::$app->YiimpUtils;
         $db       = Yii::$app->db;
         $target   = $util->hashrate_constant($algo);
-        $interval = $util->hashrate_step();
+        $interval = $util->hashrate_step($algo);
         $delay    = time() - $interval;
 
         // ── Workers ───────────────────────────────────────────────────────────
@@ -361,10 +361,21 @@ class AdminController extends BaseController
         $this->requireAdmin();
         $symbol = Yii::$app->request->get('symbol', 'all');
 
+        // Include coins with funded accounts, earnings, OR accounts that only
+        // have active workers. Miners with a zero balance (e.g. NEB) must still
+        // be selectable; otherwise the page silently falls back to "all".
+        $minerUserIds = (new \yii\db\Query)->select('userid')->from('workers')->distinct();
+        $accountCoinIds = (new \yii\db\Query)->select('coinid')->from('accounts')
+            ->where(['or',
+                ['>', 'balance', 0.0001],
+                ['in', 'id', $minerUserIds],
+            ])
+            ->distinct();
+
         $activeCoins = Coins::find()
             ->where(['enable' => 1])
             ->andWhere(['or',
-                ['in', 'id', (new \yii\db\Query)->select('coinid')->from('accounts')->where(['>', 'balance', 0.0001])->distinct()],
+                ['in', 'id', $accountCoinIds],
                 ['in', 'id', (new \yii\db\Query)->select('coinid')->from('earnings')->distinct()],
             ])
             ->orderBy('symbol')
@@ -381,6 +392,7 @@ class AdminController extends BaseController
         $this->requireAdmin();
         $symbol = Yii::$app->request->get('symbol', 'all');
         $util   = Yii::$app->YiimpUtils;
+        $conv   = Yii::$app->ConversionUtils;
 
         // ── Resolve coin and user list ────────────────────────────────────────
         $coin = null;
@@ -394,21 +406,14 @@ class AdminController extends BaseController
                 ->all();
         } else {
             $coin = Coins::find()->where(['symbol' => $symbol])->one();
-            if (!$coin) {
-                return $this->renderPartial('user_results', [
-                    'symbol' => $symbol, 'users' => [], 'coin' => null,
-                    'coins' => [], 'rateMap' => [], 'badRateMap' => [],
-                    'minerCountMap' => [], 'blockDataMap' => [], 'paidMap' => [],
-                ]);
-            }
-            $users = Accounts::find()
+            $users = $coin ? Accounts::find()
                 ->where(['coinid' => $coin->id])
                 ->andWhere(['or',
                     ['>', 'balance', 0.001],
                     ['in', 'id', (new \yii\db\Query)->select('userid')->from('workers')->distinct()],
                 ])
                 ->orderBy(['balance' => SORT_DESC])
-                ->all();
+                ->all() : [];
         }
 
         $userIds = array_map(fn($u) => $u->id, $users);
@@ -425,20 +430,36 @@ class AdminController extends BaseController
         $paidMap       = [];
 
         if ($userIds) {
-            $db       = Yii::$app->db;
-            $target   = $util->hashrate_constant();
-            $interval = $util->hashrate_step();
-            $delay    = time() - $interval;
-            $inList   = implode(',', array_map('intval', $userIds));
+            $db = Yii::$app->db;
 
-            // Hashrate per user
-            foreach ($db->createCommand(
-                "SELECT userid, SUM(difficulty) * :target / :interval / 1000 AS rate
-                 FROM shares WHERE valid=1 AND time > :delay AND userid IN ($inList)
-                 GROUP BY userid",
-                [':target' => $target, ':interval' => $interval, ':delay' => $delay]
-            )->queryAll() as $r) {
-                $rateMap[(int) $r['userid']] = (float) $r['rate'];
+            // Hashrate must use each user's own algo. NEB share difficulty is
+            // raw expected hashes, so applying the generic Bitcoin constant /
+            // 300s window here reported a single small worker as tens of PH/s.
+            $userAlgoMap = [];
+            $algoUserIds = [];
+            foreach ($users as $user) {
+                // Use a non-empty sentinel for coins missing from the batch so
+                // hashrate helpers fall back to the generic scale, not the
+                // algo currently stored in the admin session.
+                $algo                   = $coins[$user->coinid]->algo ?? 'unknown';
+                $userAlgoMap[$user->id] = $algo;
+                $algoUserIds[$algo][]   = (int) $user->id;
+            }
+
+            foreach ($algoUserIds as $algo => $uids) {
+                $target   = $util->hashrate_constant($algo);
+                $interval = $util->hashrate_step($algo);
+                $delay    = time() - $interval;
+                $inList   = implode(',', array_map('intval', $uids));
+
+                foreach ($db->createCommand(
+                    "SELECT userid, SUM(difficulty) * :target / :interval / 1000 AS rate
+                     FROM shares WHERE valid=1 AND time > :delay AND userid IN ($inList)
+                     GROUP BY userid",
+                    [':target' => $target, ':interval' => $interval, ':delay' => $delay]
+                )->queryAll() as $r) {
+                    $rateMap[(int) $r['userid']] = (float) $r['rate'];
+                }
             }
 
             // Worker count per user
@@ -471,9 +492,60 @@ class AdminController extends BaseController
 
             // Bad-rate per user (cached in YiimpUtils; no raw DB hit on warm cache)
             foreach ($userIds as $uid) {
-                $badRateMap[$uid] = (float) $util->user_rate_bad($uid);
+                $badRateMap[$uid] = (float) $util->user_rate_bad($uid, $userAlgoMap[$uid] ?? 'unknown');
             }
         }
+
+        // ── Totals ────────────────────────────────────────────────────────────
+        // Per-row amounts stay in the coin's own unit. A single-coin view sums
+        // in that coin; "-all-" mixes units, so use BTC equivalents there.
+        $totalBalance = 0.0;
+        $totalPaid    = 0.0;
+        $rawByCoin    = [];
+        foreach ($users as $user) {
+            $cid     = (int) $user->coinid;
+            $balance = (float) $user->balance;
+            $paid    = (float) ($paidMap[$user->id] ?? 0);
+
+            $totalBalance += $balance;
+            $totalPaid    += $paid;
+
+            if (!isset($rawByCoin[$cid])) $rawByCoin[$cid] = ['balance' => 0.0, 'paid' => 0.0];
+            $rawByCoin[$cid]['balance'] += $balance;
+            $rawByCoin[$cid]['paid']    += $paid;
+        }
+
+        $isAll       = ($symbol === 'all');
+        $balanceBtc  = 0.0;
+        $paidBtc     = 0.0;
+        $unpriced    = 0;
+        if ($isAll) {
+            foreach ($rawByCoin as $cid => $amounts) {
+                $price = (float) ($coins[$cid]->price ?? 0);
+                if ($price > 0) {
+                    $balanceBtc += $amounts['balance'] * $price;
+                    $paidBtc    += $amounts['paid'] * $price;
+                } elseif ($amounts['balance'] > 0 || $amounts['paid'] > 0) {
+                    $unpriced++;
+                }
+            }
+        }
+
+        $unitLabel   = $isAll ? '' : (string) ($coin->symbol ?? $symbol);
+        $balanceFmt  = $isAll
+            ? '₿ ' . $conv->bitcoinvaluetoa($balanceBtc)
+            : $conv->bitcoinvaluetoa($totalBalance) . ' ' . $unitLabel;
+        $paidFmt     = $isAll
+            ? '₿ ' . $conv->bitcoinvaluetoa($paidBtc)
+            : $conv->bitcoinvaluetoa($totalPaid) . ' ' . $unitLabel;
+
+        $totalsNote  = '';
+        if ($isAll) {
+            $totalsNote = 'est. BTC @ current price';
+            if ($unpriced > 0) $totalsNote .= " · {$unpriced} coin(s) without price excluded";
+        }
+        $balanceNote = $isAll ? $totalsNote : 'owed to miners · ' . $unitLabel;
+        $paidNote    = $isAll ? $totalsNote : 'lifetime payouts · ' . $unitLabel;
 
         return $this->renderPartial('user_results', [
             'symbol'        => $symbol,
@@ -485,6 +557,14 @@ class AdminController extends BaseController
             'minerCountMap' => $minerCountMap,
             'blockDataMap'  => $blockDataMap,
             'paidMap'       => $paidMap,
+            'totalBalance'  => $totalBalance,
+            'totalPaid'     => $totalPaid,
+            'balanceFmt'    => $balanceFmt,
+            'paidFmt'       => $paidFmt,
+            'totalsNote'    => $totalsNote,
+            'balanceNote'   => $balanceNote,
+            'paidNote'      => $paidNote,
+            'isAll'         => $isAll,
         ]);
     }
 
@@ -592,7 +672,7 @@ class AdminController extends BaseController
 
 	public function actionCoinwallet_results()
 	{
-		$server      = Yii::$app->getRequest()->getQueryParam('server');
+		$server      = (string) Yii::$app->getRequest()->getQueryParam('server');
 		$coins       = CoinService::getCoinWalletList($server);
 		$mining      = Mining::find()->one();
 		$coinIds     = array_map(fn($c) => $c->id, $coins);

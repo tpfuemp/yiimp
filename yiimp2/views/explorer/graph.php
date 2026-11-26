@@ -16,7 +16,12 @@ if (empty($json)) {
 	$tm = 0;
 
 	$remote = new WalletRPC($coin);
-	for($i = $coin->block_height; $i > max(0, $coin->block_height-500); $i--)
+	// Ethereum RPC has no batched block calls; NEB answers one RPC per block
+	// too. Keep both graphs responsive.
+	if ($coin->rpcencoding == 'GETH') $graphBlocks = 40;
+	elseif ($coin->algo === 'nebhash' || $coin->symbol === 'NEB') $graphBlocks = 60;
+	else $graphBlocks = 500;
+	for($i = $coin->block_height; $i > max(0, $coin->block_height-$graphBlocks); $i--)
 	{
 		$hash = $remote->getblockhash($i);
 		if(!$hash) continue;
@@ -24,8 +29,11 @@ if (empty($json)) {
 		$block = $remote->getblock($hash);
 		if(!$block) continue;
 
-		// only graph PoW blocks
-		if (!Yii::$app->ConversionUtils->arraySafeval($block,'nonce',0) && 
+		// only graph PoW blocks; firopow reports nonce=0 in valid PoW blocks
+		$isPos = isset($block['mint']) ||
+			strstr((string) Yii::$app->ConversionUtils->arraySafeVal($block, 'flags', ''), 'proof-of-stake');
+		if ($isPos) continue;
+		if (!array_key_exists('nonce', $block) &&
 			!Yii::$app->ConversionUtils->arraySafeval($block,'auxpow',0)) continue;
 
 		$n++;

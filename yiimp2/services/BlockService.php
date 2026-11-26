@@ -143,25 +143,20 @@ class BlockService
                 $account->save();
             }
 
-            // Calculate and store block effort (shared)
-            $lastShared    = $db->createCommand(
-                "SELECT height, time FROM blocks
-                 WHERE coin_id=:id AND solo=0 AND category IN ('immature','generate')
-                 ORDER BY height DESC LIMIT 1",
-                [':id' => $coin->id]
-            )->queryOne();
-            $timeLastShared = (int) ($lastShared['time'] ?? 0);
-
+            // Effort uses the same share window as the reward distribution.
+            // Looking up the previous block by height is unreliable because
+            // stratum has already inserted the current block row with solo=0;
+            // a time range from that row would only count the next round.
             $totalDiff = (float) $db->createCommand(
-                'SELECT SUM(difficulty) FROM shares
-                 WHERE coinid=:coin AND algo=:algo AND solo=0 AND time>=:since',
-                [':coin' => $coin->id, ':algo' => $coin->algo, ':since' => $timeLastShared]
+                "SELECT SUM(difficulty) FROM shares
+                 WHERE algo=:algo AND valid=1 AND solo=0 AND {$shareWhere}",
+                array_merge([':algo' => $coin->algo], $shareParams)
             )->queryScalar();
 
             $shareDifficulty = Yii::$app->ConversionUtils->block_difficulty_for_shares($coin, $block->difficulty);
-            if ($shareDifficulty > 0) {
-                $block->effort = round($totalDiff * 100 / $shareDifficulty, 2);
-            }
+            $block->effort = ($shareDifficulty > 0 && $totalDiff)
+                ? round($totalDiff * 100 / $shareDifficulty, 2)
+                : 0;
             $block->solo = 0;
             $block->save();
 
@@ -209,25 +204,17 @@ class BlockService
             $account->last_earning = time();
             $account->save();
 
-            // Calculate and store block effort (solo)
-            $lastSolo    = $db->createCommand(
-                "SELECT height, time FROM blocks
-                 WHERE coin_id=:id AND solo=1 AND category IN ('immature','generate')
-                 ORDER BY height DESC LIMIT 1",
-                [':id' => $coin->id]
-            )->queryOne();
-            $timeLastSolo = (int) ($lastSolo['time'] ?? 0);
-
+            // Same share window as the solo reward calculation (see above).
             $totalDiff = (float) $db->createCommand(
-                'SELECT SUM(difficulty) FROM shares
-                 WHERE coinid=:coin AND algo=:algo AND solo=1 AND time>=:since',
-                [':coin' => $coin->id, ':algo' => $coin->algo, ':since' => $timeLastSolo]
+                "SELECT SUM(difficulty) FROM shares
+                 WHERE algo=:algo AND valid=1 AND solo=1 AND {$shareWhere}",
+                array_merge([':algo' => $coin->algo], $shareParams)
             )->queryScalar();
 
             $shareDifficulty = Yii::$app->ConversionUtils->block_difficulty_for_shares($coin, $block->difficulty);
-            if ($shareDifficulty > 0) {
-                $block->effort = round($totalDiff * 100 / $shareDifficulty, 2);
-            }
+            $block->effort = ($shareDifficulty > 0 && $totalDiff)
+                ? round($totalDiff * 100 / $shareDifficulty, 2)
+                : 0;
             $block->solo = 1;
             $block->save();
         }
@@ -306,7 +293,17 @@ class BlockService
                 }
                 Yii::info("{$coin->symbol} {$block->height} confirmed after {$blockAge}s", __CLASS__);
 
-            } elseif (!$blockExt || !isset($blockExt['tx'][0])) {
+            } elseif (!$blockExt) {
+                $block->amount = 0;
+                $block->save();
+                Yii::info("{$coin->symbol} orphan at height {$block->height} after " . (time() - $block->time) . 's', __CLASS__);
+                continue;
+
+            } elseif ($coin->rpcencoding === 'GETH') {
+                // Ethereum PoW has no coinbase tx; the reward is synthesized
+                // from the block hash by WalletRPC.
+
+            } elseif (!isset($blockExt['tx'][0])) {
                 $block->amount = 0;
                 $block->save();
                 Yii::info("{$coin->symbol} orphan at height {$block->height} after " . (time() - $block->time) . 's', __CLASS__);
@@ -318,14 +315,17 @@ class BlockService
                 continue;
             }
 
-            $tx = $remote->gettransaction($blockExt['tx'][0]);
+            $txid = $coin->rpcencoding === 'GETH' ? $blockExt['hash'] : $blockExt['tx'][0];
+            $tx = $coin->algo === 'nebhash'
+                ? $remote->gettransaction($txid, $block->height)
+                : $remote->gettransaction($txid);
             if (!$tx || !isset($tx['details'][0])) {
                 $block->amount = 0;
                 $block->save();
                 continue;
             }
 
-            $block->txhash        = $blockExt['tx'][0];
+            $block->txhash        = $txid;
             $block->category      = 'immature';
             $block->amount        = $tx['details'][0]['amount'];
             $block->confirmations = $tx['confirmations'] ?? 0;
@@ -393,16 +393,25 @@ class BlockService
                     $block->save();
                 }
 
-                if (!$blockExt || empty($blockExt['tx'][0])) {
-                    continue;
+                if ($coin->rpcencoding === 'GETH') {
+                    if (!$blockExt) {
+                        continue;
+                    }
+                    $block->txhash = $blockExt['hash'];
+                } else {
+                    if (!$blockExt || empty($blockExt['tx'][0])) {
+                        continue;
+                    }
+                    $block->txhash = $blockExt['tx'][0];
                 }
-                $block->txhash = $blockExt['tx'][0];
                 if (empty($block->txhash)) {
                     continue;
                 }
             }
 
-            $tx = $remote->gettransaction($block->txhash);
+            $tx = $coin->algo === 'nebhash'
+                ? $remote->gettransaction($block->txhash, $block->height)
+                : $remote->gettransaction($block->txhash);
 
             if (!$tx && $block->category !== 'orphan') {
                 if ($coin->enable) {
@@ -532,14 +541,29 @@ class BlockService
                 continue;
             }
 
+            // listsinceblock returns newest-first. Pay the oldest block first,
+            // otherwise a newer block consumes shares belonging to an older
+            // round and the older block ends up with no earnings.
+            $transactions = $list['transactions'] ?? [];
+            usort($transactions, static function (array $a, array $b): int {
+                $ta = (int) ($a['time'] ?? 0);
+                $tb = (int) ($b['time'] ?? 0);
+                if ($ta === $tb) {
+                    return strcmp((string) ($a['blockhash'] ?? ''), (string) ($b['blockhash'] ?? ''));
+                }
+                return $ta <=> $tb;
+            });
+
             $mostRecent = 0;
-            foreach ($list['transactions'] as $transaction) {
+            foreach ($transactions as $transaction) {
                 if (!isset($transaction['blockhash'])) {
                     continue;
                 }
                 $txTime = $transaction['time'] ?? 0;
-                if ($txTime > time() - 5 * 60) {
-                    continue; // too recent — wait for it to stabilise
+                // Show newly found blocks on the web as soon as the wallet
+                // sees them; getblock() below still validates the block.
+                if ($txTime > time() - 15) {
+                    continue;
                 }
                 if ($txTime < time() - 60 * 60) {
                     continue; // too old — already processed
@@ -582,11 +606,28 @@ class BlockService
                 $newBlock->amount     = (float) ($transaction['amount'] ?? 0);
                 $newBlock->algo       = $coin->algo;
 
+                // Wallet scans do not know which worker found the block. Recover
+                // the finder from the highest-difficulty valid share in the round
+                // so the web page can show it. Stratum-injected blocks already
+                // have userid/workerid and are left alone.
+                if (empty($newBlock->userid)) {
+                    $finder = $db->createCommand(
+                        'SELECT userid, workerid FROM shares
+                         WHERE coinid=:coin AND algo=:algo AND valid=1 AND time<=:t
+                         ORDER BY difficulty DESC LIMIT 1',
+                        [':coin' => $coin->id, ':algo' => $coin->algo, ':t' => $txTime]
+                    )->queryOne();
+                    if ($finder) {
+                        $newBlock->userid   = (int) $finder['userid'];
+                        $newBlock->workerid = (int) $finder['workerid'];
+                    }
+                }
+
                 if (($blockExt['nonce'] ?? 0) != 0) {
-                    // PoW block — compute user-facing difficulty from block hash.
                     if ($coin->algo === 'homescrypt') {
-                        // Lumenite's block hash is SHA256d, not the HomeScrypt PoW
-                        // digest: use the best share difficulty of the round
+                        // Lumenite's block hash is SHA256d, not the HomeScrypt
+                        // PoW digest, so hash_to_difficulty() is meaningless.
+                        // Use the best share difficulty in the round instead.
                         $shareDiff = $db->createCommand(
                             'SELECT MAX(share_diff) FROM shares
                              WHERE coinid=:coin AND algo=:algo AND valid=1
@@ -595,6 +636,7 @@ class BlockService
                         )->queryScalar();
                         $newBlock->difficulty_user = (float) $shareDiff ?: (float) $coin->difficulty;
                     } else {
+                        // PoW block — compute user-facing difficulty from block hash.
                         $newBlock->difficulty_user = Yii::$app->ConversionUtils->hash_to_difficulty($coin, $transaction['blockhash']);
                     }
                 } elseif ($coin->rpcencoding === 'POS' && ($blockExt['flags'] ?? '') === 'proof-of-stake') {

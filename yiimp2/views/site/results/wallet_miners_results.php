@@ -23,34 +23,26 @@ if ($coinid) {
 $utils = Yii::$app->YiimpUtils;
 $conv = Yii::$app->ConversionUtils;
 $now = time();
+$isTailwind = Yii::$app->LayoutManager->isTailwind();
+$isLegacy   = Yii::$app->LayoutManager->isLegacy();
+$workerConnections = Workers::find()->where(['userid' => $userid])->count();
 
-echo "<div class='main-left-box'>";
-echo "<div class='main-left-title'>Miners: {$user->username}</div>";
-echo "<div class='main-left-inner'>";
+if ($isLegacy) {
+	echo "<div id='wallet-miners-card' class='main-left-box'>";
+	echo "<div class='main-left-title'><span class='wl-head-main'>"
+		. "<span class='wl-title'>Miners</span></span>"
+		. "<span class='wl-chips'><span class='wl-pill blue'>{$workerConnections} connections</span>"
+		. "<span class='wl-pill'>auto · 60s</span></span></div>";
+	echo "<div class='main-left-inner'><div style='overflow-x:auto'>";
+} else {
+	echo "<div class='main-left-box'>";
+	echo "<div class='main-left-title'>Miners</div>";
+	echo "<div class='main-left-inner'>";
+}
 
-echo <<<'CSS'
-<style>
-.wallet-miners-table .coin-cell { white-space: nowrap; }
-.wallet-miners-table .coin-cell img { width:16px; height:16px; margin-right:6px; vertical-align:middle; }
-.wallet-miners-table .coin-algo { color:#888; font-size:.85em; margin-left:4px; }
-.wallet-miners-table .mode { display:inline-block; padding:2px 7px; border-radius:3px;
-	color:#fff; font-size:.85em; font-weight:bold; }
-.wallet-miners-table .mode.shared { background:#87d547; }
-.wallet-miners-table .mode.solo { background:#48d8d8; }
-.wallet-miners-table .ttf { font-variant-numeric:tabular-nums; }
-</style>
-CSS;
-
-echo '<table class="dataGrid2">';
-echo "<thead>";
-echo "<tr>";
-echo "<th align=left>Summary</th>";
-echo "<th align=right width=80>Workers</th>";
-echo "<th align=right width=80>Hashrate*</th>";
-echo "<th align=right width=60>TTF</th>";
-echo "</tr>";
-echo "</thead>";
-
+// Algo summary as a compact pill strip instead of a 4-column table.
+$summaryShown = false;
+$algoPills = array();
 foreach($utils->get_algos() as $algo)
 {
 	if (!YIIMP_ALLOW_EXCHANGE && isset($coin) && $coin->algo != $algo) continue;
@@ -61,18 +53,21 @@ foreach($utils->get_algos() as $algo)
 	if (!$minercount) continue;
 
 	$user_pool_rate = $utils->user_rate($userid, $algo);
-	$user_pool_rate = $user_pool_rate? $conv->Itoa2($user_pool_rate).'h/s': '-';
+	$user_pool_rate = $user_pool_rate ? $conv->Itoa2($user_pool_rate).'h/s' : '-';
 
-	echo '<tr class="ssrow">';
-	echo '<td><b>'.$algo.'</b></td>';
-	echo '<td align="right" >'.$minercount.'</td>';
-	echo '<td align="right" width="100"><b>'.$user_pool_rate.'</b></td>';
-	// algo-level TTF combines different coin difficulties, so point to the per-coin table
-	echo '<td align="right" width="100" title="See TTF per coin below">-</td>';
-	echo '</tr>';
+	$algoPills[] = '<span class="wm-algo-pill"><span class="wm-algo-bolt">&#9889;</span>'
+		. htmlspecialchars($algo, ENT_QUOTES, 'UTF-8')
+		. '<b>' . $minercount . ' ' . ($minercount == 1 ? 'worker' : 'workers') . '</b>'
+		. '<span>' . htmlspecialchars($user_pool_rate, ENT_QUOTES, 'UTF-8') . '</span>'
+		. '</span>';
+	$summaryShown = true;
 }
-
-echo "</table>";
+if (!$summaryShown) {
+	echo "<div class='wl-empty'>No Miners Found</div>";
+} else {
+	echo "<div class='wm-section-label'>Algos</div>";
+	echo "<div class='wm-algo-strip'>" . implode('', $algoPills) . "</div>";
+}
 ////////////////////////////////////////////////////////////////////////////////
 
 // Coins this user has mined recently. db_workers only knows the algo, so coin
@@ -98,6 +93,10 @@ $workers = Workers::find()
 		->orderBy('password')
 		->all();
 
+// TLS status is written by the rebuilt stratum binary. Keep the page working
+// on older schemas: no column means no tag rather than an AR attribute error.
+$hasTlsColumn = count($workers) && $workers[0]->hasAttribute('tls');
+
 // One rig can open several stratum connections, creating duplicate worker rows
 // with the same name. Collapse them to one row per name and add up their rates.
 $sharesPerMinute = (new \yii\db\Query())
@@ -115,7 +114,9 @@ $workerStats = array();
 foreach($workers as $worker)
 {
 	$name = trim((string) $worker->worker);
-	if ($name === '') $name = '(no name)';	// unnamed connections share one row
+	// Some miners connect with an empty worker name. Keep them visible instead of
+	// dropping them, otherwise the per-coin and per-worker detail tables disappear.
+	if ($name === '') $name = 'worker-' . (int) $worker->id;
 	if (!isset($workerStats[$name]))
 		$workerStats[$name] = array('worker' => $worker, 'hashrate' => 0.0, 'shares' => 0);
 	$workerStats[$name]['hashrate'] += (float) $utils->worker_rate($worker->id, $worker->algo);
@@ -211,18 +212,11 @@ foreach($totalShares as $row)
 
 if(count($uniqueWorkers))
 {
-	echo "<br>";
-	echo '<table class="dataGrid2 wallet-miners-table">';
-	echo "<thead>";
-	echo "<tr>";
-	echo "<th align=left>Coin</th>";
-	echo "<th align=left>Mode</th>";
-	echo "<th align=right width=80>Workers</th>";
-	echo "<th align=right>Shares</th>";
-	echo "<th align=right width=80>Hashrate*</th>";
-	echo "<th align=right width=60>TTF</th>";
-	echo "</tr>";
-	echo "</thead>";
+	echo "<div class='wl-summary'><span><i></i><b>" . count($uniqueWorkers) . " workers</b> connected</span>"
+		. "<span>Coin from c=SYMBOL in the password</span><span>Refresh <b>60s</b></span></div>";
+	echo "<div class='wm-section-label'>By coin</div>";
+	echo '<table class="dataGrid2 wm-table">';
+	echo "<thead><tr><th class='wl-left'>Coin</th><th>Mode</th><th>Workers</th><th>Shares</th><th>Hashrate</th><th>Next block</th></tr></thead>";
 
 	$shown = false;
 	foreach($coins as $rowCoinid => $rowCoin)
@@ -249,99 +243,131 @@ if(count($uniqueWorkers))
 			$networkHash = $utils->coin_nethash($rowCoin);
 			$ttf = ($userRate && $poolRate && $networkHash)
 				? $networkHash / $poolRate * $blocktime : 0;
-			$ttfText = $ttf ? $conv->sectoa2($ttf) : '-';
+			$ttfText = $ttf ? $conv->sectoa2($ttf) : '—';
 
 			$userDiff = isset($userShareMap[$rowCoinid][$solo]) ? $userShareMap[$rowCoinid][$solo] : 0;
 			$totalDiff = isset($totalShareMap[$rowCoinid][$solo]) ? $totalShareMap[$rowCoinid][$solo] : 0;
 			$percent = ($userDiff && $totalDiff) ? round($userDiff * 100 / $totalDiff, 2) : 0;
-			$sharesText = (!$solo && $percent) ? $conv->Itoa2($percent).'%' : '-';
+			$sharesText = (!$solo && $percent) ? $conv->Itoa2($percent).'%' : '—';
 
-			$rateText = $userRate ? $conv->Itoa2($userRate).'h/s' : '-';
+			$rateText = $userRate ? $conv->Itoa2($userRate).'h/s' : '—';
 			$tip = 'diff '.number_format((float) $rowCoin->difficulty, 2)
-				.' · network '.($networkHash ? $conv->Itoa2($networkHash).'h/s' : '-')
+				.' · network '.($networkHash ? $conv->Itoa2($networkHash).'h/s' : '—')
 				.' · block '.$blocktime.'s'
-				.' · pool '.($poolRate ? $conv->Itoa2($poolRate).'h/s' : '-')
-				.' · you '.($userRate ? $conv->Itoa2($userRate).'h/s' : '-');
+				.' · pool '.($poolRate ? $conv->Itoa2($poolRate).'h/s' : '—')
+				.' · you '.($userRate ? $conv->Itoa2($userRate).'h/s' : '—');
 
 			$symbol = htmlspecialchars($rowCoin->symbol, ENT_QUOTES, 'UTF-8');
 			$name = htmlspecialchars($rowCoin->name, ENT_QUOTES, 'UTF-8');
+			$initials = strtoupper(substr((string) $rowCoin->symbol, 0, 3));
+			$coinImg = !empty($rowCoin->image)
+				? '<img src="' . htmlspecialchars($rowCoin->image, ENT_QUOTES, 'UTF-8') . '" alt="" onerror="this.remove()">'
+				: '';
 
-			echo '<tr class="ssrow">';
-			echo '<td class="coin-cell" title="'.$name.'">'
-				. (($rowCoin->image) ? '<img src="'.htmlspecialchars($rowCoin->image, ENT_QUOTES, 'UTF-8').'" alt="">' : '')
-				. $symbol.'<span class="coin-algo">'.$rowCoin->algo.'</span></td>';
-			echo '<td><span class="mode '.($solo ? 'solo' : 'shared').'">'.($solo ? 'Solo' : 'Shared').'</span></td>';
-			echo '<td align="right">'.$workerTotal.'</td>';
-			echo '<td align="right" width="100">'.$sharesText.'</td>';
-			echo '<td align="right" width="100"><b>'.$rateText.'</b></td>';
-			echo '<td align="right" width="100" class="ttf" title="'.$tip.'">'.$ttfText.'</td>';
+			echo '<tr>';
+			echo '<td class="wl-left"><span class="wl-coin"><span class="wl-ico">' . htmlspecialchars($initials) . $coinImg . '</span>'
+				. '<span class="wl-coin-main"><span class="wl-link" title="' . $name . '">' . $symbol . '</span>'
+				. '<span class="wl-cap">' . htmlspecialchars((string) $rowCoin->algo) . '</span></span></span></td>';
+			echo '<td><span class="wl-pill ' . ($solo ? 'teal' : 'blue') . '">' . ($solo ? 'Solo' : 'Shared') . '</span></td>';
+			echo '<td><span class="wl-val">' . $workerTotal . '</span></td>';
+			echo '<td><span class="wl-val">' . $sharesText . '</span></td>';
+			echo '<td><span class="wl-val">' . $rateText . '</span></td>';
+			echo '<td title="' . htmlspecialchars($tip) . '"><span class="wl-val">' . $ttfText . '</span></td>';
 			echo '</tr>';
 			$shown = true;
 		}
 	}
 
 	if (!$shown) {
-		echo '<tr class="ssrow"><td colspan="6" align="center">No shares in the last hour and no connected workers</td></tr>';
+		echo "<tr><td colspan='6' class='wl-empty'>No Miners Found</td></tr>";
 	}
 	echo "</table>";
-	echo "<p style='font-size: .8em'>TTF is estimated per coin from that coin's difficulty and pool hashrate.<br>"
-		."Workers are connected miners with the same name merged (unnamed ones as one row)."
-		." Coin from c=SYMBOL in the password (or the account coin).</p>";
 }
 ////////////////////////////////////////////////////////////////////////////////
 
 if(count($uniqueWorkers))
 {
-	echo "<br>";
-	echo "<table  class='dataGrid2'>";
-	echo "<thead>";
-	echo "<tr>";
-	echo "<th align=left>Details</th>";
+	echo "<div class='wm-section-label'>Connected workers</div>";
+	echo '<table class="dataGrid2 wm-table">';
+	echo "<thead><tr>";
+	echo "<th class='wl-left'>Worker</th>";
 	if (!is_null(Yii::$app->user->identity)) echo "<th>IP</th>";
-	echo "<th align=left>Password</th>";
-	echo "<th align=left>Algo</th>";
-	echo "<th align=right>Diff</th>";
-	echo "<th align=right title='extranonce.subscribe'>ES**</th>";
-	echo "<th align=right width=80>Hashrate*</th>";
-	echo "<th align=right width=60>Shares/Min*</th>";
-	echo "</tr>";
-	echo "</thead>";
+	echo "<th class='wl-left'>Algo</th>";
+	echo "<th>Diff</th>";
+	echo "<th>Hashrate</th>";
+	echo "<th>Shares/min</th>";
+	echo "<th>Coin</th>";
+	echo "</tr></thead>";
 
 	foreach($workerStats as $name => $stat)
 	{
 		$worker = $stat['worker'];
 
-		$user_rate1 = $stat['hashrate'] ? $conv->Itoa2($stat['hashrate']).'h/s' : '';
+		$user_rate1 = $stat['hashrate'] ? $conv->Itoa2($stat['hashrate']).'h/s' : '—';
 
-		// version, password and worker name come from the miner: escape them
-		$esc = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-		$version = $esc(substr($worker->version, 0, 20));
-		$password = $esc(substr($worker->password, 0, 32));
+		// NEB stores a 256-bit target difficulty; show the same scaled value the
+		// miner prints (d=0.1 -> 0.1 elsewhere). Raw value stays in the tooltip.
+		$diffRaw = htmlspecialchars((string) $worker->difficulty, ENT_QUOTES, 'UTF-8');
+		$diffText = $worker->algo === 'nebhash'
+			? number_format($utils->display_difficulty($worker->algo, $worker->difficulty), 4, '.', ',')
+			: $diffRaw;
 
-		$subscribe = $conv->Booltoa($worker->subscribe);
+		$version = trim((string) $worker->version);
+		$version = $version !== '' ? substr($version, 0, 24) : '';
+		$password = trim((string) $worker->password);
 
 		$shares_per_minute = $stat['shares'];
+		$active = $shares_per_minute > 0;
+
+		$workerCoinSymbol = '—';
+		if (preg_match('/(?:^|,)c=([A-Za-z0-9_.-]+)/i', $password, $matches))
+			$workerCoinSymbol = strtoupper($matches[1]);
+		elseif ($coin)
+			$workerCoinSymbol = strtoupper((string) $coin->symbol);
 
 		echo '<tr class="ssrow">';
-		echo '<td title="'.$esc($worker->version).'"><b>Version:</b> '.$version.' <br> <b>Worker Name:</b> '.$esc($name).' </td>';
-		if (!is_null(Yii::$app->user->identity)) echo '<td>'.$esc($worker->ip).'</td>';
-		echo '<td title="'.$esc($worker->password).'">'.$password.'</td>';
-		echo '<td>'.$worker->algo.'</td>';
-		echo '<td align="right">'.$worker->difficulty.'</td>';
-		echo '<td align="right">'.$subscribe.'</td>';
-		echo '<td align="right">'.$user_rate1.'</td>';
-		echo '<td align="center" title="">'.$shares_per_minute.'</td>';
+		echo '<td class="wl-left"><span class="wm-worker">'
+			. '<span class="wm-worker-dot' . ($active ? ' active' : '') . '"></span>'
+			. '<span class="wm-worker-main">'
+			. '<span class="wm-worker-name">' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8')
+			. ($worker->subscribe ? ' <span class="wm-tag-es" title="extranonce.subscribe">ES</span>' : '')
+			. ($hasTlsColumn && $worker->tls ? ' <span class="wm-tag-tls" title="TLS connection">TLS</span>' : '')
+			. '</span>';
+		if ($version !== '' || $password !== '') {
+			echo '<span class="wm-worker-sub">';
+			if ($version !== '') echo htmlspecialchars($version, ENT_QUOTES, 'UTF-8');
+			if ($version !== '' && $password !== '') echo ' · ';
+			if ($password !== '')
+				echo '<span title="' . htmlspecialchars((string) $worker->password, ENT_QUOTES, 'UTF-8') . '">&#9881; '
+					. htmlspecialchars(substr($password, 0, 24), ENT_QUOTES, 'UTF-8') . '</span>';
+			echo '</span>';
+		}
+		echo '</span></span></td>';
+		if (!is_null(Yii::$app->user->identity))
+			echo "<td>" . htmlspecialchars((string) $worker->ip, ENT_QUOTES, 'UTF-8') . "</td>";
+		echo '<td><span class="wl-pill blue">' . htmlspecialchars((string) $worker->algo, ENT_QUOTES, 'UTF-8') . '</span></td>';
+		echo '<td title="raw target difficulty: ' . $diffRaw . '">' . $diffText . '</td>';
+		echo '<td><span class="wl-val">' . htmlspecialchars($user_rate1, ENT_QUOTES, 'UTF-8') . '</span></td>';
+		echo '<td><span class="wl-val">' . htmlspecialchars((string) $shares_per_minute, ENT_QUOTES, 'UTF-8') . '/min</span></td>';
+		echo '<td>' . htmlspecialchars($workerCoinSymbol, ENT_QUOTES, 'UTF-8') . '</td>';
 		echo '</tr>';
 	}
 
 	echo "</table>";
 }
 
-echo "</div>";
+if ($isLegacy) {
+	echo "</div>";
+	echo "<div class='wl-foot'><span>* shares/min from the last 60 seconds</span>"
+		. "<span>ES = extranonce.subscribe · TLS = encrypted stratum</span><span>Refresh 60s</span></div>";
+	echo "</div></div>";
+} else {
+	echo "</div>";
 
-echo "<p style='font-size: .8em'>
-		&nbsp;* approximate from the last 5 minutes submitted shares<br>
-		&nbsp;** extranonce.subscribe<br>
+	echo "<p style='font-size: .8em'>
+		&nbsp;* shares/min from the last 60 seconds<br>
+		&nbsp;ES = extranonce.subscribe · TLS = encrypted stratum<br>
 		</p>";
 
-echo "</div><br>";
+	echo "</div><br>";
+}

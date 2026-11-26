@@ -4,6 +4,15 @@
 require_once(file_exists('/etc/yiimp/serverconfig.php') ? '/etc/yiimp/serverconfig.php' : 'serverconfig.php');
 require_once(__DIR__ . '/constants.php');   // promote YAAMP_* → YIIMP_* if serverconfig is old
 
+// yiimp2 views print this constant verbatim (no scheme), unlike YAAMP_SITE_URL.
+if (!defined('YIIMP_API_URL')) {
+    define('YIIMP_API_URL', preg_replace('#^https?://#', '', YAAMP_SITE_URL));
+}
+// Older Yiimp configs do not define these; yiimp2's api view expects them.
+if (!defined('YIIMP_API_PAYOUTS')) define('YIIMP_API_PAYOUTS', false);
+if (!defined('YIIMP_API_PAYOUTS_PERIOD')) define('YIIMP_API_PAYOUTS_PERIOD', 24 * 3600);
+if (!defined('YIIMP_RENTAL')) define('YIIMP_RENTAL', false);
+
 if (defined('YIIMP_DEBUG') && (YIIMP_DEBUG === true)) {
     define('YII_DEBUG', true);
     define('YII_ENV', 'dev');
@@ -103,6 +112,14 @@ $config = [
             'enablePrettyUrl' => true,
             'showScriptName' => false,
             'rules' => [
+                // Canonical wallet pages: /wallet and /wallet/ADDRESS
+                'wallet' => 'site/wallet',
+                'wallet/<address:[^/]+>' => 'site/wallet',
+
+                // Public coin catalog and canonical coin block pages
+                'coins' => 'site/coins',
+                'coins/<symbol:[A-Za-z0-9_.-]+>' => 'site/block',
+
                 // Market actions live under /admin/market/* for access-control clarity
                 'admin/market/<action:\w+>' => 'market/<action>',
 

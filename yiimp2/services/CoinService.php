@@ -115,20 +115,25 @@ class CoinService
                 $coin->rpcencoding = $this->detectRpcEncoding($coin, $remote);
             }
 
+            // Ethereum-style nodes do not implement Bitcoin-only RPC methods
+            // such as submitblock/getauxblock/getblocktemplate. Skip those
+            // probes; the GETH/NIRO readiness branch below still applies.
+            $isEthRpc = in_array(strtoupper((string) $coin->rpcencoding), ['GETH', 'NIRO'], true);
+
             // Detect submitblock support
-            if (is_null($coin->hassubmitblock)) {
+            if (!$isEthRpc && is_null($coin->hassubmitblock)) {
                 $remote->submitblock('');
                 $coin->hassubmitblock = strcasecmp((string) $remote->error, 'method not found') !== 0;
             }
 
             // Detect AuxPoW support
-            if (is_null($coin->auxpow)) {
+            if (!$isEthRpc && is_null($coin->auxpow)) {
                 $remote->getauxblock();
                 $coin->auxpow = strcasecmp((string) $remote->error, 'method not found') !== 0;
             }
 
             // Block template / reward
-            $template = $this->getBlockTemplate($coin, $remote);
+            $template = $isEthRpc ? null : $this->getBlockTemplate($coin, $remote);
 
             if ($template && isset($template['coinbasevalue'])) {
                 $coin->reward = $template['coinbasevalue'] / 1e8 * $coin->reward_mul;
@@ -266,7 +271,10 @@ class CoinService
             }
 
             if ($coin->network_hash) {
-                $coin->network_ttf = (int) min($coin->difficulty * 0x100000000 / $coin->network_hash, 2147483647);
+                // NEB difficulty is hashes per block (2^256/target), not the
+                // Bitcoin powlimit-scaled difficulty, so its TTF has no 2^32.
+                $ttfFactor = ($coin->algo === 'nebhash' || $coin->symbol === 'NEB') ? 1.0 : 0x100000000;
+                $coin->network_ttf = (int) min($coin->difficulty * $ttfFactor / $coin->network_hash, 2147483647);
             }
 
             if (isset($poolRate[$coin->algo]) && $poolRate[$coin->algo]) {
@@ -564,11 +572,14 @@ class CoinService
      */
     public static function getCoinWalletList(?string $server): array
     {
+        // Match the original yiimp admin page: show every coin that is
+        // installed, enabled for mining, or watched for history. Requiring
+        // installed AND watch hides almost every wallet when watch is unused.
         $query = Coins::find()
-            ->where(['installed' => 1, 'watch' => 1])
+            ->where(['or', ['installed' => 1], ['enable' => 1], ['watch' => 1]])
             ->orderBy('algo, index_avg DESC');
 
-        if (!empty($server)) {
+        if ($server !== null && $server !== '') {
             $query->andWhere(['rpchost' => $server]);
         }
 
