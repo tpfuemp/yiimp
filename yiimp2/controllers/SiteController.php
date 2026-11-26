@@ -68,7 +68,28 @@ class SiteController extends BaseController
         if (!is_null($address))
             return $this->render('wallet');
         else
-            return $this->render('index');
+            return $this->render('index', ['tlsPorts' => $this->buildTlsPortMap()]);
+    }
+
+    /**
+     * Dedicated TLS port per algo, read from the live stratum configs so the
+     * miner command generator never shows a port that is not actually enabled.
+     *
+     * @return array<string,int>
+     */
+    private function buildTlsPortMap(): array
+    {
+        $configDir = dirname(Yii::$app->basePath) . '/config/stratum';
+        $ports = [];
+
+        foreach (glob($configDir . '/*.conf') ?: [] as $file) {
+            $ini = parse_ini_file($file, true) ?: [];
+            $algo = (string) ($ini['STRATUM']['algo'] ?? basename($file, '.conf'));
+            $tlsPort = (int) ($ini['TCP']['tls_port'] ?? 0);
+            if ($tlsPort > 0) $ports[$algo] = $tlsPort;
+        }
+
+        return $ports;
     }
 
     /**
