@@ -102,6 +102,10 @@ write_case('fixtures', 'x11-payees-100', dict(BASE, algo='x11', symbol='TDASH'),
 # litecoin MWEB: the extension block data is kept for block submission
 write_case('fixtures', 'ltc-mweb', dict(BASE, algo='scrypt', symbol='TLTC', segwit=1, mweb=1),
            {'getblocktemplate': gbt(ntx=2, segwit=True, mweb=''.join(h('mweb', i) for i in range(16)))})
+# evrmore: miner dev fund output from coinbasetxn.minerdevfund (P2SH address)
+write_case('fixtures', 'evr-devfund', dict(BASE, algo='evrprogpow', symbol='TEVR'),
+           {'getblocktemplate': gbt(ntx=2, coinbasetxn={'minerdevfund': {
+               'addresses': ['eHNUGzw8ZG9PGC8gKtnneyMaQXQTtAUm98'], 'minimumvalue': 31250000}})})
 
 # ---- overflow inputs -------------------------------------------------------
 # 200 payees: coinb2[8K]

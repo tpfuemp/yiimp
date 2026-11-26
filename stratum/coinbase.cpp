@@ -226,7 +226,7 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 
 	char script1[4*1024];
 	char script2[32];
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
+	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
 	{
 		// coinbase v_in only current height
 		sprintf(script1, "%s", eheight);
@@ -781,7 +781,51 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
         return;
     }
 
-    else if(!strcmp(coind->symbol, "CLORE")||!strcmp(coind->symbol, "CMS")||!strcmp(coind->symbol, "MEWC")||!strcmp(coind->symbol, "PHI"))
+    if (is_evrprogpow)
+    {
+        // Evrmore: the miner dev fund output the node asks for in GBT
+        // (coinbasetxn.minerdevfund); coinbasevalue includes it
+        json_value *coinbasetxn = json_get_object(json_result, "coinbasetxn");
+        json_value *devfund = coinbasetxn ? json_get_object(coinbasetxn, "minerdevfund") : NULL;
+        json_value *addresses = devfund ? json_get_array(devfund, "addresses") : NULL;
+        const char *dev_address = (addresses && addresses->u.array.length && addresses->u.array.values[0]
+            && addresses->u.array.values[0]->type == json_string) ? addresses->u.array.values[0]->u.string.ptr : NULL;
+        json_int_t dev_amount = devfund ? json_get_int(devfund, "minimumvalue") : 0;
+
+        if (dev_address && *dev_address && dev_amount > 0 && dev_amount < available)
+        {
+            char hash160[64] = { 0 };
+            char dev_script[128] = { 0 };
+            if (!base58_decode(dev_address, hash160) || !*hash160) {
+                stratumlog("[%s] invalid minerdevfund address %s\n", coind->symbol, dev_address);
+                return;
+            }
+
+            // P2SH: a9 14 <hash160> 87, P2PKH: 76 a9 14 <hash160> 88 ac
+            int version = base58_address_version(dev_address);
+            if (version == 92 || version == 122 || version == 196)
+                snprintf(dev_script, sizeof(dev_script), "a914%s87", hash160);
+            else
+                snprintf(dev_script, sizeof(dev_script), "76a914%s88ac", hash160);
+
+            char outputs_count[4] = { 0 };
+            sprintf(outputs_count, "%02x", 2 + (templ->has_segwit_txs ? 1 : 0));
+            STRADD(templ->coinb2, outputs_count);
+
+            json_int_t miner_amount = available - dev_amount;
+            job_pack_tx(coind, templ->coinb2, miner_amount, NULL);
+            script_pack_tx(coind, templ->coinb2, dev_amount, dev_script);
+            if (templ->has_segwit_txs) STRADD(templ->coinb2, commitment);
+            STRADD(templ->coinb2, "00000000"); // locktime
+
+            coind->reward = (double)miner_amount / 100000000 * coind->reward_mul;
+            return;
+        }
+        if (devfund)
+            debuglog("[%s] minerdevfund without usable address/amount, not added\n", coind->symbol);
+    }
+
+    if(!strcmp(coind->symbol, "CLORE")||!strcmp(coind->symbol, "CMS")||!strcmp(coind->symbol, "MEWC")||!strcmp(coind->symbol, "PHI"))
     {
         // Community address required in coinbase to avoid "bad-cb-amount" rejection
 

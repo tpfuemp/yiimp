@@ -120,6 +120,7 @@ int main(int argc, char **argv)
 	is_firopow = !strcmp(g_current_algo->name, "firopow");
 	is_phihash = !strcmp(g_current_algo->name, "phihash");
 	is_meowpow = !strcmp(g_current_algo->name, "meowpow");
+	is_evrprogpow = !strcmp(g_current_algo->name, "evrprogpow");
 	coind->pos = !strcasecmp(coind->rpcencoding, "POS");
 
 	str_overflows = 0;
