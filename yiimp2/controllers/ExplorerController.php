@@ -13,6 +13,9 @@ class ExplorerController extends BaseController
 {
 	public $defaultAction='index';
 
+	// Explorer search forms are read-only legacy POST forms without CSRF tokens.
+	public $enableCsrfValidation = false;
+
 	/////////////////////////////////////////////////
 	// dynamic reroute action on coin symbol
 	public function createAction($id)
@@ -25,11 +28,30 @@ class ExplorerController extends BaseController
 			return Yii::createObject($actionMap[$id], [$id, $this]);
 		}
 
+		$request = Yii::$app->getRequest();
+		$hasIdParam = $request->getQueryParam('id') !== null;
 		if (strlen($id) <= 10) {
-			$coin = Coins::findOne(['symbol' => $id]);
-			
-			if ($coin && ($coin->visible)) {
-				$id = $this->defaultAction;
+			$coin = Coins::findOne(['symbol' => strtoupper($id)]);
+			if (!$coin && ctype_digit($id)) {
+				$coin = Coins::findOne((int) $id);
+			}
+
+			$isAdmin = !Yii::$app->user->isGuest && (Yii::$app->user->identity?->is_admin ?? false);
+			// Explicit ?id=N must still work with symbol routes: /explorer/LRS?id=7.
+			if ($coin && ($coin->visible || $isAdmin || $hasIdParam)) {
+				$query = $request->getQueryParams();
+				if ($request->getIsPost()) {
+					// Mirror the Yii1 controller: POST searches redirect through
+					// actionSearch() so the coin is retained in the URL.
+					$key = $coin->visible ? 'SYM' : 'id';
+					$query[$key] = $coin->visible ? $coin->symbol : $coin->id;
+					$id = 'search';
+				} else {
+					// Keep the symbol and id in sync, even on legacy URLs.
+					$query['id'] = $coin->id;
+					$id = $this->defaultAction;
+				}
+				$request->setQueryParams($query);
 			}
 		}
 		if (preg_match('/^(?:[a-z0-9_]+-)*[a-z0-9_]+$/', $id)) {
@@ -50,7 +72,7 @@ class ExplorerController extends BaseController
 	public function createUrl($route,$params=array(),$ampersand='&')
 	{
 		if ($route == '/explorer' && isset($params['id'])) {
-			$coin = getdbo('db_coins', intval($params['id']));
+			$coin = Coins::findOne((int) $params['id']);
 			if ($coin && $coin->visible && !is_numeric($coin->symbol)) {
 				unset($params['id']);
 				$route = '/explorer/'.$coin->symbol.'?'.http_build_query($params,'',$ampersand);
@@ -84,12 +106,12 @@ class ExplorerController extends BaseController
 
 		$txid = Yii::$app->YiimpUtils->gethexparam('txid');
 		$q = Yii::$app->YiimpUtils->gethexparam('q');
-		if (strlen($q) >= 32 && ctype_xdigit($q)) {
+		if ($coin && strlen($q) >= 32 && ctype_xdigit($q)) {
 			$remote = new WalletRPC($coin);
 			$block = $remote->getblock($q);
 			if ($block) {
 				$hash = $q;
-				$height = Yii::$app->ConversionUtils->objSafeVal($hash, 'height');
+				$height = (int) Yii::$app->ConversionUtils->arraySafeVal($block, 'height');
 			} else {
 				$txid = $q;
 			}
@@ -123,17 +145,20 @@ class ExplorerController extends BaseController
 	// redirect POST request with url cleanup...
 	public function actionSearch()
 	{
-		$height = getiparam('height');
-		$txid = gethexparam('txid');
-		$hash = gethexparam('hash');
-		$q = gethexparam('q');
+		$utils = Yii::$app->YiimpUtils;
+		$height = (int) $utils->getparam('height');
+		$txid = $utils->gethexparam('txid');
+		$hash = $utils->gethexparam('hash');
+		$q = $utils->gethexparam('q');
 		$url = '/'; // defaults to home on invalid search
-		if (isset($_GET['SYM'])) {
+		$sym = $utils->getparam('SYM', NULL);
+		if ($sym !== null) {
 			// only for visible coins
-			$url = "/explorer/".$_GET['SYM']."?";
-		} else if (isset($_GET['id'])) {
+			$sym = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $sym);
+			if ($sym !== '') $url = "/explorer/{$sym}?";
+		} else if ($utils->getparam('id', NULL) !== NULL) {
 			// only for hidden coins
-			$url = "/explorer/".$_GET['id']."?";
+			$url = '/explorer/'.(int) $utils->getparam('id').'?';
 		}
 		if (!empty($height)) $url .= "&height=$height";
 		if (!empty($txid)) $url .= "&txid=$txid";

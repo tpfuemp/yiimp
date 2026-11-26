@@ -116,7 +116,10 @@ class SiteController extends BaseController
      */
     public function actionApiSpec(): Response
     {
-        $baseUrl       = 'http://' . (defined('YIIMP_SITE_URL') ? YIIMP_SITE_URL : Yii::$app->request->hostName);
+        $baseUrl       = defined('YIIMP_SITE_URL') ? trim(YIIMP_SITE_URL) : Yii::$app->request->hostInfo;
+        if ($baseUrl !== '' && !preg_match('#^https?://#i', $baseUrl)) {
+            $baseUrl = 'https://' . $baseUrl;
+        }
         $hasRental     = defined('YIIMP_RENTAL')             && YIIMP_RENTAL;
         $hasPayouts    = defined('YIIMP_API_PAYOUTS')        && YIIMP_API_PAYOUTS;
         $payoutHours   = defined('YIIMP_API_PAYOUTS_PERIOD') ? (int) (YIIMP_API_PAYOUTS_PERIOD / 3600) : 24;
@@ -395,9 +398,137 @@ class SiteController extends BaseController
      *
      * @return string
      */
-	public function actionDiff()
+	public function actionDiff(): string
 	{
-		return $this->render('diff');
+		return $this->render('diff', $this->buildDiffData());
+	}
+
+	/**
+	 * AJAX refresh endpoint for the live diff page.
+	 */
+	public function actionDiff_data(): Response
+	{
+		$data = $this->buildDiffData();
+		Yii::$app->response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+
+		return $this->asJson([
+			'generated' => gmdate('Y-m-d H:i:s', $data['now']),
+			'html'      => $this->renderPartial('diff_live', $data),
+		]);
+	}
+
+	private function buildDiffData(): array
+	{
+		$now       = time();
+		$configDir = dirname(Yii::$app->basePath) . '/config/stratum';
+		$rows      = [];
+
+		// Live stratum configuration from the runtime .conf files.
+		foreach (glob($configDir . '/*.conf') ?: [] as $file) {
+			$ini     = parse_ini_file($file, true) ?: [];
+			$section = $ini['STRATUM'] ?? [];
+			$algo    = (string) ($section['algo'] ?? basename($file, '.conf'));
+			$default = (float) ($section['difficulty'] ?? 0);
+
+			$rows[$algo] = [
+				'algo'         => $algo,
+				'port'         => (int) ($ini['TCP']['port'] ?? 0),
+				'tls_port'     => (int) ($ini['TCP']['tls_port'] ?? 0),
+				'config_file'  => basename($file),
+				'default'      => $default,
+				'min'          => isset($section['diff_min']) ? (float) $section['diff_min'] : $default / 2,
+				'max'          => isset($section['diff_max']) ? (float) $section['diff_max'] : $default * 8192,
+				'symbol'       => '',
+				'coin_name'    => '',
+				'network_diff' => null,
+				'workers'      => 0,
+				'fds'          => 0,
+				'pid'          => null,
+				'started'      => null,
+				'seen'         => null,
+				'hashrate'     => null,
+				'hr_time'      => null,
+			];
+		}
+
+		// Live process/connection stats written by each stratum instance.
+		$stratums = (new \yii\db\Query())->from('stratums')->all();
+		foreach ($stratums as $st) {
+			$algo = (string) ($st['algo'] ?? '');
+			if ($algo === '') continue;
+
+			if (!isset($rows[$algo])) {
+				$rows[$algo] = [
+					'algo' => $algo, 'port' => 0, 'config_file' => '',
+					'default' => 0, 'min' => 0, 'max' => 0,
+					'symbol' => '', 'coin_name' => '', 'network_diff' => null,
+					'workers' => 0, 'fds' => 0, 'pid' => null,
+					'started' => null, 'seen' => null, 'hashrate' => null, 'hr_time' => null,
+				];
+			}
+
+			$rows[$algo]['port']    = (int) ($st['port'] ?? 0) ?: $rows[$algo]['port'];
+			$rows[$algo]['symbol']  = (string) ($st['symbol'] ?? '') ?: $rows[$algo]['symbol'];
+			$rows[$algo]['workers'] = (int) ($st['workers'] ?? 0);
+			$rows[$algo]['fds']     = (int) ($st['fds'] ?? 0);
+			$rows[$algo]['pid']     = !empty($st['pid']) ? (int) $st['pid'] : null;
+			$rows[$algo]['started'] = !empty($st['started']) ? (int) $st['started'] : null;
+			$rows[$algo]['seen']    = !empty($st['time']) ? (int) $st['time'] : null;
+		}
+
+		// Live coin/network difficulty refreshed by the backend.
+		$coins = (new \yii\db\Query())
+			->select(['symbol', 'name', 'algo', 'difficulty'])
+			->from('coins')
+			->where(['enable' => 1, 'visible' => 1])
+			->all();
+		foreach ($coins as $coin) {
+			$algo = (string) ($coin['algo'] ?? '');
+			if (!isset($rows[$algo])) continue;
+			if ($rows[$algo]['symbol'] === '') {
+				$rows[$algo]['symbol']   = (string) $coin['symbol'];
+				$rows[$algo]['coin_name'] = (string) $coin['name'];
+			}
+			// several coins per algo: the difficulty of the coin shown
+			if ($rows[$algo]['symbol'] === (string) $coin['symbol']) {
+				$rows[$algo]['network_diff'] = (float) $coin['difficulty'];
+			}
+		}
+
+		foreach ($rows as &$row) {
+			$hr = (new \yii\db\Query())
+				->select(['hashrate', 'time'])
+				->from('hashrate')
+				->where(['algo' => $row['algo']])
+				->orderBy(['time' => SORT_DESC])
+				->one();
+			if ($hr) {
+				$row['hashrate'] = (float) $hr['hashrate'];
+				$row['hr_time']  = (int) $hr['time'];
+			}
+		}
+		unset($row);
+
+		usort($rows, fn($a, $b) => ($a['port'] ?: 99999) <=> ($b['port'] ?: 99999));
+
+		$workers = (new \yii\db\Query())
+			->select(['worker', 'name', 'algo', 'difficulty', 'password', 'version', 'time'])
+			->from('workers')
+			->where(['>', 'time', $now - 3600])
+			->orderBy(['time' => SORT_DESC])
+			->limit(20)
+			->all();
+
+		$stratumUrl = defined('YAAMP_STRATUM_URL')
+			? YAAMP_STRATUM_URL
+			: (defined('YIIMP_STRATUM_URL') ? YIIMP_STRATUM_URL : 'localhost');
+
+		return [
+			'rows'       => $rows,
+			'workers'    => $workers,
+			'now'        => $now,
+			'stratumUrl' => $stratumUrl,
+		];
 	}
 
     /**
@@ -422,7 +553,8 @@ class SiteController extends BaseController
 
 	public function actionMiners_results(): string
 	{
-		$algo     = Yii::$app->session->get('yaamp-algo', '');
+		$algo     = (string) Yii::$app->session->get('yaamp-algo', '');
+		$isAll    = ($algo === 'all');
 		$isAdmin  = !is_null(Yii::$app->user->identity) && Yii::$app->user->identity->is_admin;
 		$util     = Yii::$app->YiimpUtils;
 		$conv     = Yii::$app->ConversionUtils;
@@ -438,106 +570,138 @@ class SiteController extends BaseController
 			default                   => 'Mh',
 		};
 
-		$target   = $util->hashrate_constant($algo);
 		$interval = $util->hashrate_step();
 		$delay    = time() - $interval;
 
-		// ── Totals ────────────────────────────────────────────────────────────
-		$totalWorkers    = (int) (new \yii\db\Query())->from('workers')->where(['algo' => $algo])->count();
-		$totalExtranonce = (int) (new \yii\db\Query())->from('workers')->where(['algo' => $algo, 'subscribe' => 1])->count();
-
-		$totalHashrate = (float) $cache->getOrSet("current_hashrate-{$algo}", function () use ($db, $algo) {
-			return $db->createCommand(
-				"SELECT hashrate FROM hashrate WHERE algo=:a ORDER BY time DESC LIMIT 1",
-				[':a' => $algo]
-			)->queryScalar() ?: 0.0;
-		}, 60);
-
-		$totalInvalid = 0.0;
-		if ($isAdmin) {
-			$totalInvalid = (float) $cache->getOrSet("current_hashrate_bad-{$algo}", function () use ($db, $algo) {
-				return $db->createCommand(
-					"SELECT hashrate_bad FROM hashrate WHERE algo=:a ORDER BY time DESC LIMIT 1",
-					[':a' => $algo]
-				)->queryScalar() ?: 0.0;
-			}, 60);
-		}
-
-		// ── Per-version worker counts ─────────────────────────────────────────
-		$versionCounts = $db->createCommand(
-			"SELECT version, COUNT(*) AS c, SUM(subscribe) AS s FROM workers WHERE algo=:a GROUP BY version ORDER BY c DESC",
-			[':a' => $algo]
-		)->queryAll();
-
-		// ── Batch hashrate + invalid from shares (1 query instead of 2×N) ─────
-		$versionRates = $cache->getOrSet("miners-rates-{$algo}", function () use ($db, $target, $interval, $delay, $algo) {
-			$rows = $db->createCommand(
-				"SELECT w.version,
-				        SUM(CASE WHEN s.valid=1 THEN s.difficulty ELSE 0 END) * :t / :iv / 1000 AS hashrate,
-				        SUM(CASE WHEN s.valid=0 THEN s.difficulty ELSE 0 END) * :t / :iv / 1000 AS invalid
-				 FROM shares s JOIN workers w ON w.id=s.workerid
-				 WHERE s.time>:delay AND w.algo=:algo
-				 GROUP BY w.version",
-				[':t' => $target, ':iv' => $interval, ':delay' => $delay, ':algo' => $algo]
-			)->queryAll();
-			$map = [];
-			foreach ($rows as $r) {
-				$map[$r['version']] = ['hashrate' => (float)$r['hashrate'], 'invalid' => (float)$r['invalid']];
+		// "All" scope must match the Algorithm bar: only algos backed by
+		// enabled + visible coins. Recent hashrate history alone must not add
+		// dormant algos here.
+		if ($isAll) {
+			$algos = [];
+			foreach ($util->get_algos(true) ?: [] as $candidate) {
+				if (Coins::find()->where(['enable' => 1, 'visible' => 1, 'algo' => $candidate])->exists()) {
+					$algos[] = $candidate;
+				}
 			}
-			return $map;
-		}, 60);
-
-		// ── Batch donators per version (1 query instead of N) ────────────────
-		$versionDonators = [];
-		foreach ($db->createCommand(
-			"SELECT w.version, COUNT(*) AS d FROM workers w
-			 LEFT JOIN accounts a ON a.id=w.userid
-			 WHERE w.algo=:a AND a.donation>0 GROUP BY w.version",
-			[':a' => $algo]
-		)->queryAll() as $r) {
-			$versionDonators[$r['version']] = (int) $r['d'];
+		} else {
+			$algos = $algo !== '' ? [$algo] : [];
 		}
 
-		// ── Batch error breakdown per version (admin only, 1 query instead of 8×N)
+		$totalWorkers    = 0;
+		$totalExtranonce = 0;
+		$totalHashrate   = 0.0;
+		$totalInvalid    = 0.0;
+
+		$versionCounts   = [];
+		$versionRatesAll = [];
+		$versionDonators = [];
+		$versionErrors   = [];
+		$aggErrors       = [];
+
 		$errorTab = [
 			20 => 'Invalid nonce size',   21 => 'Invalid job id',
 			22 => 'Duplicate share',      23 => 'Invalid time rolling',
 			24 => 'Invalid extranonce2 size', 25 => 'Invalid share',
 			26 => 'Low difficulty share', 27 => 'Invalid extranonce',
 		];
-		$versionErrors = [];
-		if ($isAdmin) {
+
+		// ── Collect per-algo data (one set of cached queries per algo) ────────
+		foreach ($algos as $itemAlgo) {
+			$target = $util->hashrate_constant($itemAlgo);
+
+			$wQuery = (new \yii\db\Query())->from('workers')->where(['algo' => $itemAlgo]);
+			$totalWorkers    += (int) (clone $wQuery)->count();
+			$totalExtranonce += (int) (clone $wQuery)->andWhere(['subscribe' => 1])->count();
+
+			$totalHashrate += (float) $cache->getOrSet("current_hashrate-{$itemAlgo}", function () use ($db, $itemAlgo) {
+				return $db->createCommand(
+					"SELECT hashrate FROM hashrate WHERE algo=:a ORDER BY time DESC LIMIT 1",
+					[':a' => $itemAlgo]
+				)->queryScalar() ?: 0.0;
+			}, 60);
+
+			if ($isAdmin) {
+				$totalInvalid += (float) $cache->getOrSet("current_hashrate_bad-{$itemAlgo}", function () use ($db, $itemAlgo) {
+					return $db->createCommand(
+						"SELECT hashrate_bad FROM hashrate WHERE algo=:a ORDER BY time DESC LIMIT 1",
+						[':a' => $itemAlgo]
+					)->queryScalar() ?: 0.0;
+				}, 60);
+			}
+
 			foreach ($db->createCommand(
-				"SELECT w.version, s.error, SUM(s.difficulty) * :t / :iv / 1000 AS bad
-				 FROM shares s JOIN workers w ON w.id=s.workerid
-				 WHERE s.time>:delay AND w.algo=:algo AND s.valid=0 AND s.error>0
-				 GROUP BY w.version, s.error",
-				[':t' => $target, ':iv' => $interval, ':delay' => $delay, ':algo' => $algo]
+				"SELECT version, COUNT(*) AS c, SUM(subscribe) AS s FROM workers WHERE algo=:a GROUP BY version ORDER BY c DESC",
+				[':a' => $itemAlgo]
+			)->queryAll() as $row) {
+				$row['algo'] = $itemAlgo;
+				$versionCounts[] = $row;
+			}
+
+			$versionRatesAll[$itemAlgo] = $cache->getOrSet("miners-rates-{$itemAlgo}", function () use ($db, $target, $interval, $delay, $itemAlgo) {
+				$rows = $db->createCommand(
+					"SELECT w.version,
+					        SUM(CASE WHEN s.valid=1 THEN s.difficulty ELSE 0 END) * :t / :iv / 1000 AS hashrate,
+					        SUM(CASE WHEN s.valid=0 THEN s.difficulty ELSE 0 END) * :t / :iv / 1000 AS invalid
+					 FROM shares s JOIN workers w ON w.id=s.workerid
+					 WHERE s.time>:delay AND w.algo=:algo
+					 GROUP BY w.version",
+					[':t' => $target, ':iv' => $interval, ':delay' => $delay, ':algo' => $itemAlgo]
+				)->queryAll();
+				$map = [];
+				foreach ($rows as $r) {
+					$map[$r['version']] = ['hashrate' => (float)$r['hashrate'], 'invalid' => (float)$r['invalid']];
+				}
+				return $map;
+			}, 60);
+
+			foreach ($db->createCommand(
+				"SELECT w.version, COUNT(*) AS d FROM workers w
+				 LEFT JOIN accounts a ON a.id=w.userid
+				 WHERE w.algo=:a AND a.donation>0 GROUP BY w.version",
+				[':a' => $itemAlgo]
 			)->queryAll() as $r) {
-				$versionErrors[$r['version']][(int)$r['error']] = (float)$r['bad'];
+				$versionDonators[$itemAlgo][$r['version']] = (int) $r['d'];
+			}
+
+			if ($isAdmin) {
+				foreach ($db->createCommand(
+					"SELECT w.version, s.error, SUM(s.difficulty) * :t / :iv / 1000 AS bad
+					 FROM shares s JOIN workers w ON w.id=s.workerid
+					 WHERE s.time>:delay AND w.algo=:algo AND s.valid=0 AND s.error>0
+					 GROUP BY w.version, s.error",
+					[':t' => $target, ':iv' => $interval, ':delay' => $delay, ':algo' => $itemAlgo]
+				)->queryAll() as $r) {
+					$code = (int) $r['error'];
+					$bad  = (float) $r['bad'];
+					$versionErrors[$itemAlgo][$r['version']][$code] = $bad;
+					$aggErrors[$code] = ($aggErrors[$code] ?? 0.0) + $bad;
+				}
 			}
 		}
+
+		usort($versionCounts, fn($a, $b) => (int)$b['c'] <=> (int)$a['c']);
 
 		// ── Assemble per-version display data ────────────────────────────────
 		$totalDonators = 0;
 		$versionData   = [];
 
 		foreach ($versionCounts as $item) {
-			$version    = $item['version'];
+			$itemAlgo   = (string) $item['algo'];
+			$version    = (string) $item['version'];
 			$count      = (int) $item['c'];
 			$extranonce = (int) $item['s'];
-			$rates      = $versionRates[$version] ?? ['hashrate' => 0.0, 'invalid' => 0.0];
-			$hashrate   = $rates['hashrate'];
-			$invalid    = $rates['invalid'];
-			$donators   = $versionDonators[$version] ?? 0;
+			$rates      = $versionRatesAll[$itemAlgo][$version] ?? ['hashrate' => 0.0, 'invalid' => 0.0];
+			$hashrate   = (float) $rates['hashrate'];
+			$invalid    = (float) $rates['invalid'];
+			$donators   = $versionDonators[$itemAlgo][$version] ?? 0;
 
 			if (!$hashrate && !$isAdmin) continue;
 
 			$totalDonators += $donators;
 
 			$errorTitle = '';
-			if ($isAdmin && isset($versionErrors[$version])) {
-				foreach ($versionErrors[$version] as $code => $bad) {
+			if ($isAdmin && isset($versionErrors[$itemAlgo][$version])) {
+				foreach ($versionErrors[$itemAlgo][$version] as $code => $bad) {
 					if ($bad && ($hashrate + $invalid)) {
 						$pct         = round($bad * 100 / ($hashrate + $invalid), 2);
 						$errorTitle .= "{$pct}% — " . ($errorTab[$code] ?? "Error {$code}") . "\n";
@@ -551,6 +715,7 @@ class SiteController extends BaseController
 			$avg = $count ? $conv->Itoa2($hashrate / $count) . 'H/s' : '';
 
 			$versionData[] = [
+				'algo'       => $itemAlgo,
 				'version'    => substr($version, 0, 30),
 				'count'      => $count,
 				'extranonce' => $extranonce,
@@ -566,12 +731,6 @@ class SiteController extends BaseController
 		// ── Total row ─────────────────────────────────────────────────────────
 		$totalErrorTitle = '';
 		if ($isAdmin) {
-			$aggErrors = [];
-			foreach ($versionErrors as $verErrors) {
-				foreach ($verErrors as $code => $bad) {
-					$aggErrors[$code] = ($aggErrors[$code] ?? 0.0) + $bad;
-				}
-			}
 			foreach ($aggErrors as $code => $bad) {
 				if ($bad && ($totalHashrate + $totalInvalid)) {
 					$pct              = round($bad * 100 / ($totalHashrate + $totalInvalid), 2);
@@ -587,6 +746,7 @@ class SiteController extends BaseController
 		return $this->renderPartial('results/miners_results', [
 			'algo'             => $algo,
 			'algoUnit'         => $algoUnit,
+			'algoCount'        => count($algos),
 			'isAdmin'          => $isAdmin,
 			'totalWorkers'     => $totalWorkers,
 			'totalExtranonce'  => $totalExtranonce,

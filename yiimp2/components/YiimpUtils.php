@@ -314,7 +314,7 @@ class YiimpUtils extends Component
 		$coin_powlimit_bits = null;
 		
 		if (!is_null($coinid)) {
-			$coin = getdbo('db_coins', $coinid);
+			$coin = Coins::findOne((int) $coinid);
 			if (($coin) && (!is_null($coin->powlimit_bits))) {
 				$coin_powlimit_bits = $coin->powlimit_bits;
 			}
@@ -580,6 +580,56 @@ class YiimpUtils extends Component
 		return $rate;
 	}
 
+	// Per-coin variants of user_shared_rate()/user_solo_rate(), used by the
+	// wallet miners view to show a TTF for each coin instead of one per algo.
+	public function user_coin_shared_rate($userid, $coinid)
+	{
+		$coin = Coins::find()->where(['id' => $coinid])->one();
+		if(!$coin || !$coin->enable) return 0;
+
+		$target   = $this->hashrate_constant($coin->algo);
+		$interval = $this->hashrate_step();
+		$delay    = time() - $interval;
+
+		$cacheKey = "YIIMP_user_coin_shared_rate-$userid-$coinid";
+		$rate = Yii::$app->cache->get($cacheKey);
+		if ($rate === false) {
+			$rate = (new \yii\db\Query())
+					->select(["(sum(difficulty) * $target / $interval / 1000)"])
+					->from('shares')
+					->where(['valid' => 1, 'userid' => $userid, 'coinid' => $coinid, 'solo' => 0])
+					->andWhere(['>', 'time', $delay])
+					->scalar();
+			$rate = $rate ?: 0;
+			Yii::$app->cache->set($cacheKey, $rate, 60);
+		}
+		return $rate;
+	}
+
+	public function user_coin_solo_rate($userid, $coinid)
+	{
+		$coin = Coins::find()->where(['id' => $coinid])->one();
+		if(!$coin || !$coin->enable) return 0;
+
+		$target   = $this->hashrate_constant($coin->algo);
+		$interval = $this->hashrate_step();
+		$delay    = time() - $interval;
+
+		$cacheKey = "YIIMP_user_coin_solo_rate-$userid-$coinid";
+		$rate = Yii::$app->cache->get($cacheKey);
+		if ($rate === false) {
+			$rate = (new \yii\db\Query())
+					->select(["(sum(difficulty) * $target / $interval / 1000)"])
+					->from('shares')
+					->where(['valid' => 1, 'userid' => $userid, 'coinid' => $coinid, 'solo' => 1])
+					->andWhere(['>', 'time', $delay])
+					->scalar();
+			$rate = $rate ?: 0;
+			Yii::$app->cache->set($cacheKey, $rate, 60);
+		}
+		return $rate;
+	}
+
 	public function user_rate_bad($userid, $algo=null)
 	{
 		if(!$algo) $algo = Yii::$app->session->get('yaamp-algo');
@@ -827,9 +877,21 @@ class YiimpUtils extends Component
 		return $user;
 	}
 
+	public function getparam($p, $default = '')
+	{
+		// Legacy getparam() reads $_REQUEST; Yii2 splits GET and POST.
+		$request = Yii::$app->getRequest();
+		$value = $request->getBodyParam($p, NULL);
+		if ($value === NULL) {
+			$value = $request->getQueryParam($p, NULL);
+		}
+		return $value === NULL ? $default : $value;
+	}
+
 	public function gethexparam($p,$default='')
 	{
-		$str = Yii::$app->getRequest()->getQueryParam($p, NULL);
+		// Legacy gethexparam() reads $_REQUEST, so accept POST search forms too.
+		$str = $this->getparam($p, NULL);
 		$hex = (is_string($str) && ctype_xdigit($str)) ? $str : $default;
 		return $hex;
 	}
