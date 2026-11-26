@@ -217,7 +217,7 @@ void coind_init(YAAMP_COIND *coind)
 
 	// Ethereum and NEB nodes have none of the wallet RPCs below: work and height come
 	// from eth_getWork/eth_blockNumber, the beneficiary is set on the node
-	if (is_ethash || is_etchash || is_nebhash)
+	if (is_eth || is_nebhash)
 		return;
 
 	strcpy(account, coind->account);

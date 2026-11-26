@@ -136,7 +136,7 @@ static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxha
 	job->count++;
 
 //	debuglog(" assign %x, %f, %d, %s\n", job->id, client->speed, client->reconnecting, client->sock->ip);
-	if(is_ethash || is_etchash)
+	if (is_eth)
 	{
 		strcpy(client->extranonce1_last, client->extranonce1);
 		client->extranonce2size_last = client->extranonce2size;

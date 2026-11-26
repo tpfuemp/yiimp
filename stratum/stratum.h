@@ -83,6 +83,10 @@ extern bool is_randomscash;
 extern bool is_ethash;
 extern bool is_etchash;
 extern bool is_nebhash;
+// protocol families (algos/registry.def); the names above are single algos
+extern bool is_progpow;
+extern bool is_eth;
+extern bool is_equihash;
 
 extern int g_tcp_port;
 
@@ -197,6 +201,7 @@ extern bool g_autoexchange;
 /////////////////////////////////////////////////////////////////////////////////////////
 
 YAAMP_ALGO *stratum_find_algo(const char *name);
+void stratum_set_algo_flags(const YAAMP_ALGO *algo);
 
 extern "C"
 {

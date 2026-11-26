@@ -35,7 +35,7 @@ const int get_ethash_period_length()
 		return 3;
 	if (is_phihash)
 		return 3;
-	if (is_ethash || is_etchash)
+	if (is_eth)
 		return 1;
 	return 0;
 }
@@ -52,7 +52,7 @@ const unsigned int get_full_dataset_init_size()
 		return (1U << 30) * 3U;
 	if (is_phihash)
 		return (1 << 30);
-	if (is_ethash || is_etchash)
+	if (is_eth)
 		return g_ethash_params.dag_init_size ? g_ethash_params.dag_init_size : (1U << 30);
 	return 0;
 }
@@ -61,14 +61,14 @@ const unsigned int get_full_dataset_init_size()
 // with 512 the light verifier gets another mix digest than real ETH miners
 const int get_full_dataset_item_parents()
 {
-	if (is_ethash || is_etchash)
+	if (is_eth)
 		return 256;
 	return 512;
 }
 
 const int get_epoch_number(int block_number)
 {
-	if (is_ethash || is_etchash)
+	if (is_eth)
 		return ethash_epoch_for_height(block_number);
     return block_number ? block_number / get_ethash_epoch_length() : 0;
 }

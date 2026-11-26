@@ -267,7 +267,7 @@ static void decred_fix_template(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, j
 YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 {
 	// Ethereum nodes have no getblocktemplate: work comes from eth_getWork
-	if (is_ethash || is_etchash)
+	if (is_eth)
 	{
 		YAAMP_JOB_TEMPLATE *work_templ = new YAAMP_JOB_TEMPLATE;
 		memset(work_templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
@@ -300,7 +300,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		// Lumenite Core v1.2 wants both rule sets
 		strcpy(params, "[{\"rules\":[\"segwit\",\"mweb\"]}]");
 	}
-	else if (is_kawpow || is_phihash || is_meowpow || is_evrprogpow || is_meraki) {
+	else if (is_progpow && !is_firopow) {
 		sprintf(params, "[]");
 	}
 	else {
@@ -654,7 +654,6 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	coinbase_create(coind, templ, json_result);
 	json_value_free(json);
 
-	bool is_equihash = (strstr(g_current_algo->name, "equihash") == g_current_algo->name);
 
 	// create coinbase-string and merkleroot-string
 	int coinbase_len = strlen(templ->coinbase);
@@ -684,11 +683,11 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		templ->header_seed = meraki_epoch_seed(templ->height);
 		templ->header_hash = build_header_hash(templ);
 	}
-	else if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
+	else if (is_progpow && !is_meraki)
 	{
 		update_epoch(coind->id, templ->height);
 		templ->header_seed = get_kawpow_seed(templ->height);
-		if (is_kawpow || is_phihash || is_meowpow || is_evrprogpow) 
+		if (is_progpow && !is_firopow && !is_meraki) 
 		{
 			templ->header_hash = build_header_hash(templ);
 		}
@@ -738,7 +737,7 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 		templ->neb_time_start == job_last->templ->neb_time_start;
 
 	if(	!force && job_last && job_last->templ && job_last->templ->created + 45 > time(NULL) &&
-		(is_ethash || is_etchash ? same_eth_work :
+		(is_eth ? same_eth_work :
 		(is_nebhash ? same_neb_work :
 		(templ->height == job_last->templ->height &&
 		templ->txcount == job_last->templ->txcount &&
@@ -778,8 +777,7 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 			stratumlog("%s %d not reporting\n", coind->name, coind->height);
 	}
 
-	bool is_equihash = (strstr(g_current_algo->name, "equihash") == g_current_algo->name);
-	if (is_ethash || is_etchash)
+	if (is_eth)
 	{
 		// eth_getWork gives a 256-bit target, not compact nbits
 		uint8_t target_be[32];

@@ -48,7 +48,7 @@ static void job_mining_notify_buffer(YAAMP_JOB *job, char *buffer, int gen = 0)
 		return;
 	}
 
-	if (strstr(g_current_algo->name, "equihash") == g_current_algo->name)
+	if (is_equihash)
 	{
 		static char version_reversed[1024];
 		static char prev_hash_reversed[1024];
@@ -186,11 +186,11 @@ static const char *job_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char 
 	}
 
 
-	if ((is_ethash || is_etchash) && client->is_ethproxy)
+	if (is_eth && client->is_ethproxy)
 		ethash_ethproxy_work_buffer(job, client, buffer);
-	else if (is_ethash || is_etchash)
+	else if (is_eth)
 		ethash_job_mining_notify_buffer(job, client, buffer, gen);
-	else if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow || is_meraki)
+	else if (is_progpow)
 		kawpow_job_mining_notify_buffer(job, client, buffer, gen);
 	else if (is_homescrypt && homescrypt_uses_header_notify(client))
 		homescrypt_job_mining_notify_buffer(job, client, buffer, gen);
@@ -318,10 +318,9 @@ void job_broadcast(YAAMP_JOB *job)
 
 	///////////////////////
 
-	bool is_equihash = (strstr(g_current_algo->name, "equihash") == g_current_algo->name);
 
 	double coin_diff;
-	if (is_ethash || is_etchash)
+	if (is_eth)
 		coin_diff = job->coind ? job->coind->difficulty : 0;	// from the eth_getWork target
 	else
 	{

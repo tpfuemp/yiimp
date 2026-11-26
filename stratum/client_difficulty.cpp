@@ -242,8 +242,7 @@ int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 
 //	debuglog("%s diff %f\n", client->sock->ip, difficulty);
 
-	bool is_equihash = (strstr(g_current_algo->name, "equihash") == g_current_algo->name);
-	if (is_ethash || is_etchash)
+	if (is_eth)
 	{
 		// ethash scale: target = 2^224 / difficulty (Rigel, T-Rex, miningcore)
 		uint8_t target_be[32];
@@ -264,7 +263,7 @@ int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 		client_call(client, "mining.set_target", "[\"%s\"]", client->share_target.ToString().c_str());
 		client->next_target = client->share_target;
 	}
-	else if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow)
+	else if (is_progpow && !is_meraki)
 	{
 		uint256 share_target;
 		diff_to_target(share_target, difficulty);
@@ -328,12 +327,12 @@ void client_initialize_difficulty(YAAMP_CLIENT *client)
 	else value = client_password_param(client->password, "sd", 2);
 	if(!value) return;
 
-	if (is_kawpow || is_firopow || is_phihash || is_meowpow || is_evrprogpow || is_meraki)
+	if (is_progpow)
 	{
 		client->difficulty_actual = g_stratum_difficulty;
 		diff_to_target(client->share_target, client->difficulty_actual);
 	}
-	else if (is_ethash || is_etchash)
+	else if (is_eth)
 	{
 		// 256-bit target: the 64-bit range check below would reject usual values
 		double diff = client_normalize_difficulty(atof(value), client);
