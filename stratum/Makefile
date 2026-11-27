@@ -16,7 +16,7 @@ SOURCES=stratum.cpp db.cpp coind.cpp coind_aux.cpp coind_template.cpp coind_subm
 	user.cpp object.cpp json.cpp base58.cpp humanize_number.cpp
 PP=algos/progpow
 SOURCES_KAWPOW=$(PP)/lib/keccak/keccak.c $(PP)/lib/keccak/keccakf800.c $(PP)/lib/keccak/keccakf1600.c $(PP)/lib/ethash/primes.c 	$(PP)/lib/ethash/ethash.cpp $(PP)/kawpow/lib/progpow.cpp $(PP)/kawpow/hash.cpp protocol/kawpow/kawpow.cpp 	$(PP)/firopow/lib/progpow.cpp $(PP)/firopow/overrides.cpp $(PP)/firopow/hash.cpp 	$(PP)/phihash/lib/progpow.cpp $(PP)/phihash/hash.cpp 	$(PP)/meowpow/lib/progpow.cpp $(PP)/meowpow/hash.cpp 	$(PP)/evrprogpow/lib/progpow.cpp $(PP)/evrprogpow/hash.cpp
-SOURCES_MERAKI_C=$(PP)/meraki/lib/keccak/keccak.c $(PP)/meraki/lib/keccak/keccakf800.c $(PP)/meraki/lib/keccak/keccakf1600.c $(PP)/meraki/lib/meraki/primes.c
+SOURCES_MERAKI_C=$(PP)/meraki/lib/keccak/keccak.c
 SOURCES_MERAKI_CPP=$(PP)/meraki/lib/meraki/meraki.cpp $(PP)/meraki/lib/meraki/managed.cpp $(PP)/meraki/lib/meraki/progpow.cpp $(PP)/meraki/hash.cpp protocol/meraki/meraki.cpp
 SOURCES_MERAKI=$(SOURCES_MERAKI_C) $(SOURCES_MERAKI_CPP)
 SOURCES_HOMESCRYPT=algos/misc/homescrypt.cpp

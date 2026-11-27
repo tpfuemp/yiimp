@@ -5,7 +5,7 @@
 
 #include "../meraki/keccak.h"
 
-#include "../support/attributes.h"
+#include <algos/progpow/lib/support/attributes.h>
 #include <string.h>
 
 #if _WIN32
@@ -61,7 +61,7 @@ static INLINE ALWAYS_INLINE void keccak(
             data += word_size;
         }
 
-        meraki_keccakf1600(state);
+        ethash_keccakf1600(state);
 
         size -= block_size;
     }
@@ -88,7 +88,7 @@ static INLINE ALWAYS_INLINE void keccak(
 
     state[(block_size / word_size) - 1] ^= 0x8000000000000000;
 
-    meraki_keccakf1600(state);
+    ethash_keccakf1600(state);
 
     for (i = 0; i < (hash_size / word_size); ++i)
         out[i] = to_le64(state[i]);

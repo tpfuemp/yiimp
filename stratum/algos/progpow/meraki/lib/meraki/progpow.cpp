@@ -30,7 +30,7 @@ result meraki_progpow_hash(const epoch_context& context, int block_number,
 {
     const uint64_t period = uint64_t(block_number / period_length);
     const auto r = progpow_core::hash_kawpow_style<P>(context, period, header_hash.word32s, nonce,
-        seed_words, meraki_keccakf800, calculate_dataset_item_2048);
+        seed_words, ethash_keccakf800, calculate_dataset_item_2048);
     result out;
     std::memcpy(out.final_hash.word32s, r.final_hash.data(), sizeof(out.final_hash));
     std::memcpy(out.mix_hash.word32s, r.mix_hash.data(), sizeof(out.mix_hash));
