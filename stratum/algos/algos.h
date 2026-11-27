@@ -34,6 +34,7 @@
 #include "algos/lyra2/lyra2v3.h"
 #include "algos/lyra2/lyra2z.h"
 #include "algos/blake/blake.h"
+#include "algos/blake/decred.h"
 #include "algos/blake/blakecoin.h"
 #include "algos/blake/blake2s.h"
 #include "algos/x11/qubit.h"

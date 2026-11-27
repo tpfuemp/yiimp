@@ -119,13 +119,6 @@ static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxha
 			client->extranonce2size = client->extranonce2size_default;
 		}
 
-		// decred uses an extradata field in block header, 2 first uint32 are set by the miner
-		if (g_current_algo->name && !strcmp(g_current_algo->name,"decred")) {
-			memset(client->extranonce1, '0', sizeof(client->extranonce1));
-			memcpy(&client->extranonce1[16], client->extranonce1_default, 8);
-			client->extranonce1[24] = '\0';
-		}
-
 		client->difficulty_remote = 0;
 		client->jobid_locked = 0;
 	}

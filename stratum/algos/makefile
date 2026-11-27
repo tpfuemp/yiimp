@@ -12,7 +12,7 @@ LDFLAGS=-O2 -lgmp
 
 SOURCES=lyra2/lyra2re.c lyra2/lyra2v2.c lyra2/Lyra2.c lyra2/lyra2z.c lyra2/lyra2z330.c lyra2/Lyra2-z.c lyra2/Sponge.c lyra2/allium.c ../third_party/SWIFFTX/SWIFFTX.c lyra2/lyra2vc0ban.c lyra2/lyra2v3.c \
 	common/sph512.c x11/c11.c x11/x11.c x11/x12.c x11/x13.c x11/hsr14.c x11/x14.c x11/x15.c x11/x17.c x11/x17r.c x11/x18.c x11/x11k.c x11/x11kvs.c \
-	blake/blake.c blake/blakecoin.c blake/blake2s.c x11/jha.c misc/keccak.c misc/lbry.c x11/tribus.c \
+	blake/blake.c blake/decred.c blake/blakecoin.c blake/blake2s.c x11/jha.c misc/keccak.c misc/lbry.c x11/tribus.c \
 	x11/deep.c x11/fresh.c misc/groestl.c scrypt/neoscrypt.c x11/nist5.c x11/quark.c x11/qubit.c misc/skein.c misc/skein2.c misc/bmw512.c \
 	x11/bitcore.c x11/timetravel.c x11/x11evo.c x11/x16r.c x11/x16rv2.c x11/x16s.c x11/xevan.c x11/bastion.c x11/hmq17.c x11/sonoa.c \
 	misc/bmw.c misc/luffa.c blake/pentablake.c misc/vitalium.c misc/whirlpool.c misc/whirlpoolx.c misc/zr5.c \

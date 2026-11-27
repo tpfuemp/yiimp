@@ -227,7 +227,7 @@ void build_submit_values_equihash(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMP
 /////////////////////////////////////////////
 
 static void create_decred_header(YAAMP_JOB_TEMPLATE *templ, YAAMP_JOB_VALUES *out,
-	const char *ntime, const char *nonce, const char *nonce2, const char *vote, bool usegetwork)
+	const char *ntime, const char *nonce, const char *nonce1, const char *nonce2, const char *vote, bool usegetwork)
 {
 	struct __attribute__((__packed__)) {
 		uint32_t version;
@@ -253,8 +253,9 @@ static void create_decred_header(YAAMP_JOB_TEMPLATE *templ, YAAMP_JOB_VALUES *ou
 
 	memcpy(&header, templ->header, sizeof(header));
 
+	// extranonce1 at offset 144, extranonce2 at 148, nonce as raw header bytes
 	memset(header.extra, 0, 32);
-	sscanf(nonce, "%08x", &header.nonce);
+	binlify((unsigned char *) &header.nonce, nonce);
 
 	if (strcmp(vote, "")) {
 		uint16_t votebits = 0;
@@ -262,7 +263,8 @@ static void create_decred_header(YAAMP_JOB_TEMPLATE *templ, YAAMP_JOB_VALUES *ou
 		header.votebits = (header.votebits & 1) | (votebits & 0xfffe);
 	}
 
-	binlify(header.extra, nonce2);
+	binlify(header.extra, nonce1);
+	binlify(header.extra + 4, nonce2);
 
 	hexlify(out->header, (const unsigned char*) &header, 180);
 	memcpy(out->header_bin, &header, sizeof(header));
@@ -294,13 +296,18 @@ void build_submit_values_decred(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLA
 		printf("merkle root %s\n", merkleroot.c_str());
 #endif
 	}
-	create_decred_header(templ, submitvalues, ntime, nonce, nonce2, vote, usegetwork);
+	create_decred_header(templ, submitvalues, ntime, nonce, nonce1, nonce2, vote, usegetwork);
 
 	int header_len = strlen(submitvalues->header)/2;
 	g_current_algo->hash_function((char *)submitvalues->header_bin, (char *)submitvalues->hash_bin, header_len);
 
 	hexlify(submitvalues->hash_hex, submitvalues->hash_bin, 32);
 	string_be(submitvalues->hash_hex, submitvalues->hash_be);
+
+	// the block id is still BLAKE-256 of the header
+	decred_block_hash((char *)submitvalues->header_bin, (char *)submitvalues->block_hash_bin, header_len);
+	hexlify(submitvalues->block_hash_hex, submitvalues->block_hash_bin, 32);
+	string_be(submitvalues->block_hash_hex, submitvalues->block_hash_be);
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -380,12 +387,11 @@ string client_build_block(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, YAAMP_J
 		out += "00";
 
 	if (!strcmp("DCR", coind->rpcencoding)) {
-		// submit the regenerated block header
-		char hex[384];
-		hexlify(hex, submitvalues->header_bin, 180);
+		// regenerated header; getwork wants the node's padding back as well
+		char hex[2 * 192 + 1];
+		int len = coind->usegetwork && templ->decred_data_len > 180 ? templ->decred_data_len : 180;
+		hexlify(hex, submitvalues->header_bin, len);
 		out = hex;
-		if (coind->usegetwork)
-			out += "8000000100000000000005a0";
 	}
 
 	if (templ->mweb) {
@@ -507,12 +513,13 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 
 			string_be(doublehash2, hash1);
 
-			if(coind->usegetwork && !strcmp("DCR", coind->rpcencoding)) {
-				// no merkle stuff
-				strcpy(hash1, submitvalues->hash_hex);
+			const bool is_dcr = !strcmp("DCR", coind->rpcencoding);
+			if(coind->usegetwork && is_dcr) {
+				// block id is BLAKE-256, not the PoW hash
+				strcpy(hash1, submitvalues->block_hash_hex);
 			}
 
-			const char *block_hash = is_randomscash ? submitvalues->block_hash_be : submitvalues->hash_be;
+			const char *block_hash = (is_randomscash || is_dcr) ? submitvalues->block_hash_be : submitvalues->hash_be;
 
 			block_add(client->userid, client->workerid, coind->id, templ->height,
 				target_to_diff_coin(coin_target, coind->powlimit_bits - ((is_equihash)? 0 : 16)),
@@ -738,30 +745,7 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 		return true;
 	}
 
-	// check if the submitted extranonce is valid
-	if(is_decred && client->extranonce2size > 4) {
-		char extra1_id[16], extra2_id[16];
-		int cmpoft = client->extranonce2size*2 - 8;
-		STRSET(extra1_id, &client->extranonce1[cmpoft]);
-		STRSET(extra2_id, &extranonce2[cmpoft]);
-		int extradiff = (int) strcmp(extra2_id, extra1_id);
-		int extranull = (int) !strcmp(extra2_id, "00000000");
-		if (extranull && client->extranonce2size > 8)
-			extranull = (int) !strcmp(&extranonce2[8], "00000000" "00000000");
-		if (extranull) {
-			debuglog("extranonce %s is empty!, should be %s - %s\n", extranonce2, extra1_id, client->sock->ip);
-			client_submit_error(client, job, 27, "Invalid extranonce2 suffix", extranonce2, ntime, nonce);
-			return true;
-		}
-		if (extradiff) {
-			// some ccminer pre-release doesn't fill correctly the extranonce
-			client_submit_error(client, job, 27, "Invalid extranonce2 suffix", extranonce2, ntime, nonce);
-			socket_send(client->sock, "{\"id\":null,\"method\":\"mining.set_extranonce\",\"params\":[\"%s\",%d]}\n",
-				client->extranonce1, client->extranonce2size);
-			return true;
-		}
-	}
-	else if((!is_equihash) && (!ishexa(extranonce2, client->extranonce2size*2))) {
+	if((!is_equihash) && (!ishexa(extranonce2, client->extranonce2size*2))) {
 		client_submit_error(client, job, 27, "Invalid nonce2", extranonce2, ntime, nonce);
 		return true;
 	}

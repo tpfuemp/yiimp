@@ -162,6 +162,8 @@ static int decred_parse_header(YAAMP_JOB_TEMPLATE *templ, const char *header_hex
 	snprintf(hex, sizeof(hex), "%s", header_hex);
 	memset(&header, 0, sizeof(header));
 	binlify((unsigned char*) &header, hex);
+	if (getwork)
+		templ->decred_data_len = std::min((int) (strlen(header_hex) / 2), (int) sizeof(header));
 
 	templ->height = header.height;
 	// reversed to tell its not a normal stratum coinbase
@@ -232,11 +234,14 @@ retry:
 	decred_parse_header(templ, header_hex, true);
 	json_value_free(gw);
 
-	// bypass coinbase and merkle for now... send without nonce/extradata
-	const unsigned char *hdr = (unsigned char *) &templ->header[36];
-	hexlify(templ->coinb1, hdr, 192 - 80);
-	const unsigned char *sfx = (unsigned char *) &templ->header[176];
-	hexlify(templ->coinb2, sfx, 180 - 176); // stake version
+	// coinb1: header bytes 36..180, extra data zeroed (extranonce1 at 144,
+	// extranonce2 at 148); prevhash and ntime as raw header bytes
+	unsigned char *hdr = (unsigned char *) templ->header;
+	memset(hdr + 144, 0, 32);
+	hexlify(templ->coinb1, hdr + 36, 180 - 36);
+	templ->coinb2[0] = 0;
+	hexlify(templ->prevhash_be, hdr + 4, 32);
+	hexlify(templ->ntime, hdr + 136, 4);
 
 	vector<string> txhashes;
 	txhashes.push_back("");
