@@ -424,11 +424,8 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 
 	if(block_hash_ok)
 	{
-		char count_hex[8] = { 0 };
-		if (templ->txcount <= 252)
-			sprintf(count_hex, "%02x", templ->txcount & 0xFF);
-		else
-			sprintf(count_hex, "fd%02x%02x", templ->txcount & 0xFF, templ->txcount >> 8);
+		char count_hex[COMPACTSIZE_HEX];
+		ser_compactsize(templ->txcount, count_hex);
 
 		memset(block_hex, 0, block_size);
 		

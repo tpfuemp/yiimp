@@ -199,11 +199,8 @@ void kawpow_block(YAAMP_CLIENT* client, YAAMP_JOB* job, YAAMP_JOB_TEMPLATE *temp
     build_kawpow_header(templ, nonce64, mixhash, block_header, coin_base);
 
     {
-        char count_hex[8] = { 0 };
-        if (templ->txcount <= 252)
-            sprintf(count_hex, "%02x", templ->txcount & 0xFF);
-        else
-            sprintf(count_hex, "fd%02x%02x", templ->txcount & 0xFF, templ->txcount >> 8);
+        char count_hex[COMPACTSIZE_HEX];
+        ser_compactsize(templ->txcount, count_hex);
 
         memset(block_hex, 0, block_size);
         sprintf(block_hex, "%s%s%s", block_header, count_hex, coin_base);

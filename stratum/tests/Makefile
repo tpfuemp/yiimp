@@ -145,6 +145,7 @@ check-progpow: $(PPCHECK)
 	$(PPCHECK) --check vectors/progpow.txt
 
 check-templ: $(TEMPLCHECK)
+	$(TEMPLCHECK) --compactsize
 	@fail=0; for d in $(FIXTURES); do \
 	  if $(TEMPLCHECK) $$d > $(OUT)/templ.out 2>&1 && ! grep -q '^template=' $(OUT)/templ.out \
 	     && diff -u $${d}expected.txt $(OUT)/templ.out > $(OUT)/templ.diff; then \

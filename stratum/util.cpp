@@ -519,24 +519,18 @@ void ser_number(int n, char *a)
 //	printf("ser_number %d, %s\n", n, a);
 }
 
+// Bitcoin CompactSize as hex: one byte below 253, else fd/fe/ff and a
+// little-endian 2/4/8-byte value. a holds COMPACTSIZE_HEX chars.
 void ser_compactsize(uint64_t nSize, char *a)
 {
-	if (nSize < 253)
-	{
-		sprintf(a, "%02lx", nSize);
+	const int bytes = nSize < 253 ? 0 : nSize <= 0xffff ? 2 : nSize <= 0xffffffffULL ? 4 : 8;
+	if (!bytes) {
+		sprintf(a, "%02x", (unsigned int) nSize);
+		return;
 	}
-	else if (nSize <= (unsigned short)-1)
-	{
-		sprintf(a, "%02x%04lx", 253, nSize);
-	}
-	else if (nSize <= (unsigned int)-1)
-	{
-		sprintf(a, "%02x%08lx", 254, nSize);
-	}
-	else
-	{
-		sprintf(a, "%02x%016lx", 255, nSize);
-	}
+	a += sprintf(a, "%02x", bytes == 2 ? 0xfd : bytes == 4 ? 0xfe : 0xff);
+	for (int i = 0; i < bytes; i++, nSize >>= 8)
+		a += sprintf(a, "%02x", (unsigned int) (nSize & 0xff));
 }
 
 void ser_string_be(const char *input, char *output, int len)

@@ -2,6 +2,7 @@
 // the result, to catch buffer overflows on oversized RPC values.
 //
 //   templcheck <fixture-dir>
+//   templcheck --compactsize    CompactSize (varint) known answers
 //
 // <fixture-dir>/coind.conf    key=value settings for the coin (see below)
 // <fixture-dir>/<method>.json full JSON-RPC answer per method, served by
@@ -91,10 +92,33 @@ static void print_field(const char *name, const char *value)
 	printf("%s=%s\n", name, value);
 }
 
+// Bitcoin CompactSize: tx and output counts, payload lengths
+static int check_compactsize()
+{
+	static const struct { uint64_t n; const char *hex; } kat[] = {
+		{0, "00"}, {252, "fc"}, {253, "fdfd00"}, {300, "fd2c01"}, {0xffff, "fdffff"},
+		{0x10000, "fe00000100"}, {0xffffffffULL, "feffffffff"},
+		{0x100000000ULL, "ff0000000001000000"}, {0x0123456789abcdefULL, "ffefcdab8967452301"},
+	};
+	int failed = 0;
+	for (const auto &k : kat) {
+		char hex[COMPACTSIZE_HEX];
+		ser_compactsize(k.n, hex);
+		if (strcmp(hex, k.hex)) {
+			printf("compactsize %llu: got %s, want %s\n", (unsigned long long) k.n, hex, k.hex);
+			failed++;
+		}
+	}
+	printf("compactsize: %d checked, %d failed\n", (int) (sizeof(kat) / sizeof(kat[0])), failed);
+	return failed ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
+	if (argc == 2 && !strcmp(argv[1], "--compactsize"))
+		return check_compactsize();
 	if (argc != 2) {
-		fprintf(stderr, "usage: %s <fixture-dir>\n", argv[0]);
+		fprintf(stderr, "usage: %s <fixture-dir> | --compactsize\n", argv[0]);
 		return 2;
 	}
 	snprintf(g_rpc_fixture_dir, sizeof(g_rpc_fixture_dir), "%s", argv[1]);
