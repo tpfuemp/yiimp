@@ -13,7 +13,7 @@
 #ifndef PHIHASH_PROGPOW_HPP
 #define PHIHASH_PROGPOW_HPP
 
-#include <kawpow/include/ethash/ethash.hpp>
+#include <algos/progpow/include/ethash/ethash.hpp>
 
 namespace phihash
 {

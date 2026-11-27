@@ -5,7 +5,7 @@
 #define YAAMP_ETHASH_CONTEXT_H
 
 #include <memory>
-#include <kawpow/include/ethash/ethash.hpp>
+#include <algos/progpow/include/ethash/ethash.hpp>
 
 typedef std::shared_ptr<ethash::epoch_context> ethash_context_ptr;
 

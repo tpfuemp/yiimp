@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include <kawpow/include/ethash/ethash.h>
-#include <kawpow/include/ethash/hash_types.hpp>
+#include <algos/progpow/include/ethash/ethash.h>
+#include <algos/progpow/include/ethash/hash_types.hpp>
 
 #include <cstdint>
 #include <cstring>

@@ -10,10 +10,10 @@
 #include "bit_manipulation.h"
 #include "endianness.hpp"
 #include "primes.h"
-#include <kawpow/include/ethash/keccak.hpp>
-#include <kawpow/include/ethash/progpow.hpp>
+#include <algos/progpow/include/ethash/keccak.hpp>
+#include <algos/progpow/kawpow/include/progpow.hpp>
 
-#include <firopow/overrides.h>
+#include <algos/progpow/firopow/overrides.h>
 
 #include <cassert>
 #include <cstdlib>

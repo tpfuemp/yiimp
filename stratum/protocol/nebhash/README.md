@@ -4,7 +4,7 @@ This directory adds a `neb-pool/1` stratum listener for NEB v1.0.4 mainnet.
 
 ## Files
 
-- `blake3_min.c/.h`, `chacha8.c/.h`, `nebhash2.c/.h`, `shares.c/.h` — verbatim
+- `stratum/algos/nebhash/`: `blake3_min.c/.h`, `chacha8.c/.h`, `nebhash2.c/.h`, `shares.c/.h` — verbatim
   C reference PoW engine from the NEB node (Apache-2.0, see `LICENSE`).
 - `work.cpp/.h` — work-service TCP client, template/job builder, submit
   verification, reference k-window vardiff and chain-share forwarding.
@@ -55,5 +55,5 @@ This directory adds a `neb-pool/1` stratum listener for NEB v1.0.4 mainnet.
 With the node replay complete and the stratum unit running:
 
 ```sh
-python3 stratum/nebhash/tests/test_neb_pool1.py --host 127.0.0.1 --port 3645
+python3 stratum/protocol/nebhash/tests/test_neb_pool1.py --host 127.0.0.1 --port 3645
 ```

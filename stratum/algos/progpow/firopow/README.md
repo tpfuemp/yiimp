@@ -81,4 +81,4 @@ stratum+tcp://pool.example.com:3641
 ## 6. Notes
 
 Adding ethash/etchash did not change firopow; all its values are still in
-`stratum/firopow/overrides.cpp`.
+`stratum/algos/progpow/firopow/overrides.cpp`.

@@ -3,7 +3,7 @@
 #ifndef YAAMP_MERAKI_HASH_H
 #define YAAMP_MERAKI_HASH_H
 
-#include "meraki/lib/meraki/meraki.hpp"
+#include "algos/progpow/meraki/lib/meraki/meraki.hpp"
 
 #include <memory>
 #include <vector>

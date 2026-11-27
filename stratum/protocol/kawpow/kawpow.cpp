@@ -6,17 +6,17 @@
 
 //#include <openssl/sha.h>
 
-#include <firopow/hash.h>
+#include <algos/progpow/firopow/hash.h>
 
-#include <phihash/hash.h>
+#include <algos/progpow/phihash/hash.h>
 
-#include <meowpow/hash.h>
+#include <algos/progpow/meowpow/hash.h>
 
-#include <evrprogpow/hash.h>
+#include <algos/progpow/evrprogpow/hash.h>
 
-#include <kawpow/hash.h>
-#include <kawpow/helpers.hpp>
-#include <kawpow/include/ethash/progpow.hpp>
+#include <algos/progpow/kawpow/hash.h>
+#include <algos/progpow/kawpow/helpers.hpp>
+#include <algos/progpow/kawpow/include/progpow.hpp>
 
 static int g_extraonce1_counter = 0;
 static bool g_twobyte_extranonce = true;

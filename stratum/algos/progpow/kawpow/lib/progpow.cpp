@@ -2,12 +2,12 @@
 // Based on cpp-ethash's progpow.cpp, Copyright 2018-2019 Pawel Bylica.
 // Licensed under the Apache License, Version 2.0.
 
-#include <kawpow/include/ethash/progpow.hpp>
+#include <algos/progpow/kawpow/include/progpow.hpp>
 
-#include <kawpow/lib/ethash/ethash-internal.hpp>
-#include <kawpow/include/ethash/keccak.hpp>
-#include <firopow/overrides.h>
-#include <progpow/core.hpp>
+#include <algos/progpow/lib/ethash/ethash-internal.hpp>
+#include <algos/progpow/include/ethash/keccak.hpp>
+#include <algos/progpow/firopow/overrides.h>
+#include <algos/progpow/core.hpp>
 
 #include <cstring>
 

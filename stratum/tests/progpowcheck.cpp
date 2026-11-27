@@ -16,14 +16,14 @@
 #include <vector>
 
 #include "../stratum.h"
-#include "../kawpow/helpers.hpp"
-#include "../kawpow/include/ethash/progpow.hpp"
-#include "../firopow/include/progpow.hpp"
-#include "../phihash/include/progpow.hpp"
-#include "../meowpow/include/progpow.hpp"
-#include "../evrprogpow/include/progpow.hpp"
-#include "../meraki/helpers.hpp"
-#include "../meraki/lib/meraki/progpow.hpp"
+#include "algos/progpow/kawpow/helpers.hpp"
+#include "algos/progpow/kawpow/include/progpow.hpp"
+#include "algos/progpow/firopow/include/progpow.hpp"
+#include "algos/progpow/phihash/include/progpow.hpp"
+#include "algos/progpow/meowpow/include/progpow.hpp"
+#include "algos/progpow/evrprogpow/include/progpow.hpp"
+#include "algos/progpow/meraki/helpers.hpp"
+#include "algos/progpow/meraki/lib/meraki/progpow.hpp"
 
 static std::string strprintf(const char *fmt, ...)
 {

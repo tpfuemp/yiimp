@@ -63,7 +63,7 @@ docker compose up -d
 ### 2.1 Polling (default, nothing to do)
 
 The ethash stratum calls `eth_getWork` about every second and creates a new
-job as soon as `eth_header` changes (see `stratum/ethash/work.cpp`,
+job as soon as `eth_header` changes (see `stratum/protocol/ethash/work.cpp`,
 `coind_template.cpp`). This works without blocknotify.
 
 ### 2.2 Push with `eth_subscribe("newHeads")` (recommended)

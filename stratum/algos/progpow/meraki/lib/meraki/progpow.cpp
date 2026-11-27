@@ -7,7 +7,7 @@
 
 #include "meraki-internal.hpp"
 #include "keccak.hpp"
-#include <progpow/core.hpp>
+#include <algos/progpow/core.hpp>
 
 #include <cstring>
 

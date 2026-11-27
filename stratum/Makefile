@@ -1,33 +1,29 @@
 
 CC= gcc -no-pie 
 
-CFLAGS= -g -march=native -I./ -Irandomx/src
+CFLAGS= -g -march=native -I./ -Ithird_party/randomx/src
 SQLFLAGS= `mysql_config --cflags --libs`
 
 #CFLAGS=-c -O2 -I /usr/include/mysql
 #LDFLAGS=-O2 `mysql_config --libs`
 
-LDLIBS=randomx/librandomx.a iniparser/libiniparser.a algos/libalgos.a third_party/sph/libhash.a -Isecp256k1/include secp256k1/.libs/libsecp256k1.a -lpthread -lgmp -lm -lstdc++ -lssl -lcrypto -lsodium
+LDLIBS=third_party/randomx/librandomx.a third_party/iniparser/libiniparser.a algos/libalgos.a third_party/sph/libhash.a -Ithird_party/secp256k1/include third_party/secp256k1/.libs/libsecp256k1.a -lpthread -lgmp -lm -lstdc++ -lssl -lcrypto -lsodium
 LDLIBS+=-lmysqlclient -lcurl
 
 SOURCES=stratum.cpp db.cpp coind.cpp coind_aux.cpp coind_template.cpp coind_submit.cpp util.cpp list.cpp uint256.cpp arith_uint256.cpp utilstrencodings.cpp \
 	rpc.cpp job.cpp job_send.cpp job_core.cpp merkle.cpp share.cpp socket.cpp tls.cpp coinbase.cpp \
 	client.cpp client_submit.cpp client_core.cpp client_difficulty.cpp remote.cpp remote_template.cpp \
 	user.cpp object.cpp json.cpp base58.cpp humanize_number.cpp
-SOURCES_KAWPOW=kawpow/lib/keccak/keccak.c kawpow/lib/keccak/keccakf800.c kawpow/lib/keccak/keccakf1600.c kawpow/lib/ethash/primes.c \
-	kawpow/lib/ethash/ethash.cpp kawpow/lib/ethash/progpow.cpp kawpow/hash.cpp kawpow/kawpow.cpp \
-	firopow/lib/progpow.cpp firopow/overrides.cpp firopow/hash.cpp \
-	phihash/lib/progpow.cpp phihash/hash.cpp \
-	meowpow/lib/progpow.cpp meowpow/hash.cpp \
-	evrprogpow/lib/progpow.cpp evrprogpow/hash.cpp
-SOURCES_MERAKI_C=meraki/lib/keccak/keccak.c meraki/lib/keccak/keccakf800.c meraki/lib/keccak/keccakf1600.c meraki/lib/meraki/primes.c
-SOURCES_MERAKI_CPP=meraki/lib/meraki/meraki.cpp meraki/lib/meraki/managed.cpp meraki/lib/meraki/progpow.cpp meraki/hash.cpp meraki/meraki.cpp
+PP=algos/progpow
+SOURCES_KAWPOW=$(PP)/lib/keccak/keccak.c $(PP)/lib/keccak/keccakf800.c $(PP)/lib/keccak/keccakf1600.c $(PP)/lib/ethash/primes.c 	$(PP)/lib/ethash/ethash.cpp $(PP)/kawpow/lib/progpow.cpp $(PP)/kawpow/hash.cpp protocol/kawpow/kawpow.cpp 	$(PP)/firopow/lib/progpow.cpp $(PP)/firopow/overrides.cpp $(PP)/firopow/hash.cpp 	$(PP)/phihash/lib/progpow.cpp $(PP)/phihash/hash.cpp 	$(PP)/meowpow/lib/progpow.cpp $(PP)/meowpow/hash.cpp 	$(PP)/evrprogpow/lib/progpow.cpp $(PP)/evrprogpow/hash.cpp
+SOURCES_MERAKI_C=$(PP)/meraki/lib/keccak/keccak.c $(PP)/meraki/lib/keccak/keccakf800.c $(PP)/meraki/lib/keccak/keccakf1600.c $(PP)/meraki/lib/meraki/primes.c
+SOURCES_MERAKI_CPP=$(PP)/meraki/lib/meraki/meraki.cpp $(PP)/meraki/lib/meraki/managed.cpp $(PP)/meraki/lib/meraki/progpow.cpp $(PP)/meraki/hash.cpp protocol/meraki/meraki.cpp
 SOURCES_MERAKI=$(SOURCES_MERAKI_C) $(SOURCES_MERAKI_CPP)
-SOURCES_HOMESCRYPT=homescrypt/homescrypt.cpp
-SOURCES_RANDOMSCASH=randomscash/randomscash.cpp
-SOURCES_ETHASH=ethash/params.cpp ethash/context.cpp ethash/work.cpp
-SOURCES_NEBHASH_C=nebhash/blake3_min.c nebhash/chacha8.c nebhash/nebhash2.c nebhash/shares.c
-SOURCES_NEBHASH_CPP=nebhash/work.cpp
+SOURCES_HOMESCRYPT=algos/misc/homescrypt.cpp
+SOURCES_RANDOMSCASH=algos/randomx/randomscash.cpp
+SOURCES_ETHASH=protocol/ethash/params.cpp protocol/ethash/context.cpp protocol/ethash/work.cpp
+SOURCES_NEBHASH_C=algos/nebhash/blake3_min.c algos/nebhash/chacha8.c algos/nebhash/nebhash2.c algos/nebhash/shares.c
+SOURCES_NEBHASH_CPP=protocol/nebhash/work.cpp
 SOURCES_NEBHASH=$(SOURCES_NEBHASH_C) $(SOURCES_NEBHASH_CPP)
 
 CFLAGS += -DHAVE_CURL
@@ -42,9 +38,9 @@ OUTPUT=stratum
 
 CODEDIR1=algos
 CODEDIR2=third_party/sph
-CODEDIR3=iniparser
-CODEDIR4=secp256k1
-CODEDIR5=randomx
+CODEDIR3=third_party/iniparser
+CODEDIR4=third_party/secp256k1
+CODEDIR5=third_party/randomx
 
 
 .PHONY: projectcode1 projectcode2 projectcode3 projectcode4 projectcode5
@@ -78,17 +74,17 @@ endif
 
 $(SOURCES): stratum.h util.h
 stratum.o: algos/registry.def algos/algos.h
-$(SOURCES_KAWPOW) meraki/lib/meraki/progpow.cpp: progpow/core.hpp
-$(SOURCES_MERAKI): stratum.h meraki/hash.h meraki/helpers.hpp meraki/meraki.h meraki/lib/meraki/meraki.hpp meraki/lib/meraki/progpow.hpp
-$(SOURCES_HOMESCRYPT): stratum.h homescrypt/homescrypt.h
-$(SOURCES_RANDOMSCASH): stratum.h randomscash/randomscash.h randomx/src/randomx.h
-$(SOURCES_ETHASH): stratum.h ethash/params.h ethash/context.h ethash/work.h
-$(SOURCES_NEBHASH): stratum.h nebhash/work.h nebhash/shares.h nebhash/nebhash2.h nebhash/blake3_min.h nebhash/chacha8.h
+$(SOURCES_KAWPOW) $(PP)/meraki/lib/meraki/progpow.cpp: $(PP)/core.hpp
+$(SOURCES_MERAKI): stratum.h $(PP)/meraki/hash.h $(PP)/meraki/helpers.hpp protocol/meraki/meraki.h $(PP)/meraki/lib/meraki/meraki.hpp $(PP)/meraki/lib/meraki/progpow.hpp
+$(SOURCES_HOMESCRYPT): stratum.h algos/misc/homescrypt.h
+$(SOURCES_RANDOMSCASH): stratum.h algos/randomx/randomscash.h third_party/randomx/src/randomx.h
+$(SOURCES_ETHASH): stratum.h protocol/ethash/params.h protocol/ethash/context.h protocol/ethash/work.h
+$(SOURCES_NEBHASH): stratum.h protocol/nebhash/work.h algos/nebhash/shares.h algos/nebhash/nebhash2.h algos/nebhash/blake3_min.h algos/nebhash/chacha8.h
 
 # HomeScrypt v1.2 consensus needs exact IEEE-754 fmaf rounding: no FMA
 # contraction or fast-math for it
-homescrypt/homescrypt.o: homescrypt/homescrypt.cpp stratum.h homescrypt/homescrypt.h
-	$(CC) $(CFLAGS) $(SQLFLAGS) -ffp-contract=off -fno-fast-math -c homescrypt/homescrypt.cpp -o $@
+algos/misc/homescrypt.o: algos/misc/homescrypt.cpp stratum.h algos/misc/homescrypt.h
+	$(CC) $(CFLAGS) $(SQLFLAGS) -ffp-contract=off -fno-fast-math -c algos/misc/homescrypt.cpp -o $@
 
 $(OUTPUT): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDLIBS) $(LDFLAGS) -o $@
@@ -104,26 +100,12 @@ clean:
 	rm -f *.o
 	rm -f algos/*.o
 	rm -f algos/*.a
-	rm -f iniparser/*.o
-	rm -f iniparser/src/*.o
-	rm -f iniparser/*.a
+	rm -f third_party/iniparser/*.o third_party/iniparser/src/*.o third_party/iniparser/*.a
 	rm -f third_party/sph/*.o third_party/sph/*.a
 	find algos third_party/keccak-xkcp third_party/blake2-ref third_party/blake3 third_party/SWIFFTX -name '*.o' -delete
 	rm -f algos/xelisv2-pepew/*.o
-	rm -f kawpow/lib/keccak/*.o
-	rm -f phihash/*.o phihash/lib/*.o
-	rm -f meowpow/*.o meowpow/lib/*.o
-	rm -f evrprogpow/*.o evrprogpow/lib/*.o
-	rm -f kawpow/*.o
-	rm -f kawpow/lib/ethash/*.o
-	rm -f firopow/*.o
-	rm -f firopow/lib/*.o
-	rm -f nebhash/*.o
-	rm -f ethash/*.o
-	rm -f homescrypt/*.o
-	rm -f randomscash/*.o
-	rm -rf randomx/build randomx/librandomx.a
-	rm -f meraki/*.o meraki/lib/meraki/*.o meraki/lib/keccak/*.o
+	find protocol -name '*.o' -delete
+	rm -rf third_party/randomx/build third_party/randomx/librandomx.a
 	
 install: clean all
 	strip -s stratum

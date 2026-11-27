@@ -78,4 +78,4 @@ stratum+tcp://pool.example.com:3641
 
 ## 6. หมายเหตุ
 
-การเพิ่ม ethash/etchash ไม่ได้เปลี่ยนพฤติกรรม firopow ค่าเดิมทั้งหมดยังคงอยู่ใน `stratum/firopow/overrides.cpp`
+การเพิ่ม ethash/etchash ไม่ได้เปลี่ยนพฤติกรรม firopow ค่าเดิมทั้งหมดยังคงอยู่ใน `stratum/algos/progpow/firopow/overrides.cpp`

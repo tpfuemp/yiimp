@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <kawpow/include/ethash/ethash.hpp>
+#include <algos/progpow/include/ethash/ethash.hpp>
 
 #include "endianness.hpp"
 

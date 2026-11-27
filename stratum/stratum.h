@@ -27,7 +27,7 @@
 
 using namespace std;
 
-#include "iniparser/src/iniparser.h"
+#include "third_party/iniparser/src/iniparser.h"
 
 #include "json.h"
 #include "utilstrencodings.h"
@@ -179,18 +179,18 @@ extern volatile bool g_exiting;
 #include "coind.h"
 #include "remote.h"
 #include "share.h"
-#include "kawpow/hash.h"
-#include "kawpow/kawpow.h"
-#include "firopow/hash.h"
-#include "firopow/overrides.h"
-#include "phihash/hash.h"
-#include "meraki/hash.h"
-#include "meraki/meraki.h"
-#include "homescrypt/homescrypt.h"
-#include "ethash/params.h"
-#include "ethash/context.h"
-#include "ethash/work.h"
-#include "nebhash/work.h"
+#include "algos/progpow/kawpow/hash.h"
+#include "protocol/kawpow/kawpow.h"
+#include "algos/progpow/firopow/hash.h"
+#include "algos/progpow/firopow/overrides.h"
+#include "algos/progpow/phihash/hash.h"
+#include "algos/progpow/meraki/hash.h"
+#include "protocol/meraki/meraki.h"
+#include "algos/misc/homescrypt.h"
+#include "protocol/ethash/params.h"
+#include "protocol/ethash/context.h"
+#include "protocol/ethash/work.h"
+#include "protocol/nebhash/work.h"
 
 extern YAAMP_DB *g_db;
 extern YAAMP_ALGO g_algos[];

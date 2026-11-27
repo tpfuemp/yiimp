@@ -4,7 +4,7 @@
 // port under stratum/meraki/lib.
 
 #include "stratum.h"
-#include "meraki/hash.h"
+#include "algos/progpow/meraki/hash.h"
 
 extern void kawpow_block(YAAMP_CLIENT* client, YAAMP_JOB* job, YAAMP_JOB_TEMPLATE* templ,
     const char* nonce64, const char* mixhash, uint256& blockhash);

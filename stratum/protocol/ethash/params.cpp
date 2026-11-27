@@ -3,8 +3,8 @@
 
 #include "stratum.h"
 
-#include <kawpow/helpers.hpp>
-#include <kawpow/include/ethash/ethash.hpp>
+#include <algos/progpow/kawpow/helpers.hpp>
+#include <algos/progpow/include/ethash/ethash.hpp>
 
 #include <math.h>
 #include <string.h>

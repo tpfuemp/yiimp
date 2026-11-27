@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "meraki/lib/meraki/meraki.hpp"
+#include "algos/progpow/meraki/lib/meraki/meraki.hpp"
 
 #include <cstdint>
 #include <cstring>

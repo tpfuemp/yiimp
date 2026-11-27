@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "stratum.h"
-#include "include/ethash/progpow.hpp"
+#include "algos/progpow/kawpow/include/progpow.hpp"
 
 std::vector<coin_context*> coin_contexts;
 

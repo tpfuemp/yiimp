@@ -45,7 +45,7 @@ make build-devel
 
 The production build includes an isolated `node:26-alpine` stage that compiles Tailwind CSS (`yiimp2/web/css/tailwind.css`) — no Node.js enters the final image.
 
-For Ethash/Etchash setup (SQL, config, node requirements, miner ports) see [stratum/ethash/README.md](stratum/ethash/README.md).
+For Ethash/Etchash setup (SQL, config, node requirements, miner ports) see [stratum/protocol/ethash/README.md](stratum/protocol/ethash/README.md).
 
 ---
 
@@ -345,7 +345,7 @@ Coin daemons should be configured to send block notifications to the stratum:
 blocknotify=blocknotify pool.example.com:port coinid %s
 ```
 
-Algo-specific setup: Firopow/Kiiro see [stratum/firopow/README.md](stratum/firopow/README.md), Ethash/Etchash see [stratum/ethash/README.md](stratum/ethash/README.md).
+Algo-specific setup: Firopow/Kiiro see [stratum/algos/progpow/firopow/README.md](stratum/algos/progpow/firopow/README.md), Ethash/Etchash see [stratum/protocol/ethash/README.md](stratum/protocol/ethash/README.md).
 
 `geth` has no `blocknotify=` option. Use the `newHeads` watcher in
 `bin/geth-blocknotify.py` instead — see [contrib/geth-blocknotify.md](contrib/geth-blocknotify.md)

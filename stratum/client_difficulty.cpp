@@ -166,7 +166,7 @@ void client_adjust_difficulty(YAAMP_CLIENT *client)
 // speed window does not delay it
 void client_vardiff_share(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen)
 {
-	if (is_nebhash) return;	// own k-window vardiff in nebhash/work.cpp
+	if (is_nebhash) return;	// own k-window vardiff in protocol/nebhash/work.cpp
 
 	// a share from the resent job: the miner works at the new difficulty now
 	if(client->difficulty_new_gen && job && job->id == client->difficulty_prev_jobid && gen >= client->difficulty_new_gen)

@@ -10,13 +10,13 @@
 // Wire details follow spec/pool.md and spec/node.md from the NEB repository.
 
 #include "stratum.h"
-#include "nebhash/work.h"
+#include "work.h"
 
 extern "C" {
-#include "nebhash/blake3_min.h"
-#include "nebhash/chacha8.h"
-#include "nebhash/shares.h"
-#include "nebhash/nebhash2.h"
+#include "algos/nebhash/blake3_min.h"
+#include "algos/nebhash/chacha8.h"
+#include "algos/nebhash/shares.h"
+#include "algos/nebhash/nebhash2.h"
 }
 
 #include <ctype.h>

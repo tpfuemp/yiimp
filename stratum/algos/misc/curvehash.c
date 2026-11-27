@@ -9,7 +9,7 @@
  */
 
 #include "curvehash.h" 
-#include "secp256k1/include/secp256k1.h" 
+#include "third_party/secp256k1/include/secp256k1.h" 
 #include <string.h>
 #include <inttypes.h>
 

@@ -10,8 +10,8 @@
 #include <cstdint>
 #include <utility>
 
-#include <kawpow/lib/ethash/bit_manipulation.h>
-#include <kawpow/lib/ethash/kiss99.hpp>
+#include <algos/progpow/lib/ethash/bit_manipulation.h>
+#include <algos/progpow/lib/ethash/kiss99.hpp>
 
 namespace progpow_core
 {

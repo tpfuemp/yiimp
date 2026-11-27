@@ -13,7 +13,7 @@
 #ifndef MEOWPOW_PROGPOW_HPP
 #define MEOWPOW_PROGPOW_HPP
 
-#include <kawpow/include/ethash/ethash.hpp>
+#include <algos/progpow/include/ethash/ethash.hpp>
 
 namespace meowpow
 {

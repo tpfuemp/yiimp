@@ -4,9 +4,9 @@
 // with the existing Ethash/Kawpow/Firo objects in the same binary.
 
 #include "stratum.h"
-#include "meraki/hash.h"
-#include "meraki/helpers.hpp"
-#include "meraki/lib/meraki/progpow.hpp"
+#include "hash.h"
+#include "helpers.hpp"
+#include "algos/progpow/meraki/lib/meraki/progpow.hpp"
 
 #include <cmath>
 
