@@ -766,7 +766,7 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
         const char *devscript = json_get_string(devreward, "scriptpubkey");
         encode_tx_value(dev_amount, devvalue);
         snprintf(devscript2, 255, "%s", devscript);
-        sprintf(devscript_len, "%02x", strlen(devscript2) >> 1);
+        sprintf(devscript_len, "%02x", (unsigned int) (strlen(devscript2) >> 1));
         if (templ->has_segwit_txs) outputs++;
         ser_compactsize(outputs, outputs_count);
         STRADD(templ->coinb2, outputs_count);

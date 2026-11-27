@@ -203,7 +203,7 @@ void kawpow_block(YAAMP_CLIENT* client, YAAMP_JOB* job, YAAMP_JOB_TEMPLATE *temp
         ser_compactsize(templ->txcount, count_hex);
 
         memset(block_hex, 0, block_size);
-        sprintf(block_hex, "%s%s%s", block_header, count_hex, coin_base);
+        snprintf(block_hex, block_size, "%s%s%s", block_header, count_hex, coin_base);
 
         vector<string>::const_iterator i;
         for (i = templ->txdata.begin(); i != templ->txdata.end(); ++i)

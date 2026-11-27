@@ -68,7 +68,7 @@ static void job_mining_notify_buffer(YAAMP_JOB *job, char *buffer, int gen = 0)
 		string_be(templ->version, version_reversed);
 		string_be(templ->prevhash_hex, prev_hash_reversed);
 //		string_be(templ->merkleroot, merkleroot_reversed);
-		sprintf(merkleroot_reversed, "%s", templ->merkleroot);
+		STRSET(merkleroot_reversed, templ->merkleroot);
 		string_be(templ->saplingroothash, finalsaplingroot_reversed);
 		string_be(templ->ntime, time_reversed);
 		string_be(templ->nbits, bits_reversed);

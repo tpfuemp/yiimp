@@ -3,6 +3,7 @@
 //
 //   templcheck <fixture-dir>
 //   templcheck --compactsize    CompactSize (varint) known answers
+//   templcheck --strfail        refused writes, for the log rate limit
 //
 // <fixture-dir>/coind.conf    key=value settings for the coin (see below)
 // <fixture-dir>/<method>.json full JSON-RPC answer per method, served by
@@ -117,6 +118,12 @@ int main(int argc, char **argv)
 {
 	if (argc == 2 && !strcmp(argv[1], "--compactsize"))
 		return check_compactsize();
+	// 25 refused writes: the Makefile expects 10 logged lines
+	if (argc == 2 && !strcmp(argv[1], "--strfail")) {
+		char small[4];
+		for (int i = 0; i < 25; i++) STRSET(small, "too long");
+		return str_overflows == 25 ? 0 : 1;
+	}
 	if (argc != 2) {
 		fprintf(stderr, "usage: %s <fixture-dir> | --compactsize\n", argv[0]);
 		return 2;

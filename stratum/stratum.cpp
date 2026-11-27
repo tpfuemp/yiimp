@@ -197,6 +197,22 @@ YAAMP_ALGO g_algos[] =
 
 YAAMP_ALGO *g_current_algo = NULL;
 
+// Copy a config string into a fixed buffer. A missing key leaves dst as it
+// is; a value that does not fit stops the start instead of overflowing.
+template <size_t N>
+static bool ini_string(dictionary *ini, const char *key, char (&dst)[N])
+{
+	const char *value = iniparser_getstring(ini, key, NULL);
+	if (!value) return true;
+	size_t len = strlen(value);
+	if (len >= N) {
+		debuglog("config %s: value too long (%d chars, max %d)\n", key, (int) len, (int) N - 1);
+		return false;
+	}
+	memcpy(dst, value, len + 1);
+	return true;
+}
+
 YAAMP_ALGO *stratum_find_algo(const char *name)
 {
 	for(int i=0; g_algos[i].name[0]; i++)
@@ -223,8 +239,7 @@ int main(int argc, char **argv)
 	sprintf(g_log_directory, "/var/log/yiimp/");
 	initlog(NULL);
 
-	char configfile[1024];
-	sprintf(configfile, "%s", argv[1]);
+	const char *configfile = argv[1];
 
 	dictionary *ini = iniparser_load(configfile);
 	if(!ini)
@@ -234,8 +249,8 @@ int main(int argc, char **argv)
 	}
 
 	g_tcp_port = iniparser_getint(ini, "TCP:port", 3333);
-	strcpy(g_tcp_server, iniparser_getstring(ini, "TCP:server", NULL));
-	strcpy(g_tcp_password, iniparser_getstring(ini, "TCP:password", NULL));
+	bool config_ok = ini_string(ini, "TCP:server", g_tcp_server);
+	config_ok &= ini_string(ini, "TCP:password", g_tcp_password);
 
 	// Optional TLS. A certificate enables same-port auto-detection on the
 	// main port; tls_port additionally opens a TLS-only listener.
@@ -246,10 +261,10 @@ int main(int argc, char **argv)
 	snprintf(g_tcp_tls_key, sizeof(g_tcp_tls_key), "%s", tls_key ? tls_key : "");
 	g_tcp_tls_autodetect = iniparser_getint(ini, "TCP:tls_autodetect", 1) != 0;
 
-	strcpy(g_sql_host, iniparser_getstring(ini, "SQL:host", NULL));
-	strcpy(g_sql_database, iniparser_getstring(ini, "SQL:database", NULL));
-	strcpy(g_sql_username, iniparser_getstring(ini, "SQL:username", NULL));
-	strcpy(g_sql_password, iniparser_getstring(ini, "SQL:password", NULL));
+	config_ok &= ini_string(ini, "SQL:host", g_sql_host);
+	config_ok &= ini_string(ini, "SQL:database", g_sql_database);
+	config_ok &= ini_string(ini, "SQL:username", g_sql_username);
+	config_ok &= ini_string(ini, "SQL:password", g_sql_password);
 	g_sql_port = iniparser_getint(ini, "SQL:port", 3306);
 
 	if (iniparser_getint(ini, "STRATUM:autoexchange", 1) == 0)
@@ -258,12 +273,10 @@ int main(int argc, char **argv)
 		g_autoexchange = true;
 
 	// optional coin filters (to mine only one on a special port or a test instance)
-	char *coin_filter = iniparser_getstring(ini, "WALLETS:include", NULL);
-	strcpy(g_stratum_coin_include, coin_filter ? coin_filter : "");
-	coin_filter = iniparser_getstring(ini, "WALLETS:exclude", NULL);
-	strcpy(g_stratum_coin_exclude, coin_filter ? coin_filter : "");
+	config_ok &= ini_string(ini, "WALLETS:include", g_stratum_coin_include);
+	config_ok &= ini_string(ini, "WALLETS:exclude", g_stratum_coin_exclude);
 
-	strcpy(g_stratum_algo, iniparser_getstring(ini, "STRATUM:algo", NULL));
+	config_ok &= ini_string(ini, "STRATUM:algo", g_stratum_algo);
 	g_stratum_difficulty = iniparser_getdouble(ini, "STRATUM:difficulty", 16);
 	g_stratum_min_diff = iniparser_getdouble(ini, "STRATUM:diff_min", g_stratum_difficulty/2);
 	g_stratum_max_diff = iniparser_getdouble(ini, "STRATUM:diff_max", g_stratum_difficulty*8192);
@@ -291,8 +304,8 @@ int main(int argc, char **argv)
 	// d= in the password fixes the difficulty (only spam raises it); off: d= is a start value like sd=
 	g_stratum_allow_static_diff = iniparser_getboolean(ini, "STRATUM:allow_static_diff", false);
 	
-	char *new_log_directory = iniparser_getstring(ini, "STRATUM:logdir", NULL);
-	if (new_log_directory) { strcpy(g_log_directory, new_log_directory); }
+	config_ok &= ini_string(ini, "STRATUM:logdir", g_log_directory);
+	if (!config_ok) return 1;
 
 	if (!strcmp(g_stratum_algo, "ethash") || !strcmp(g_stratum_algo, "etchash"))
 		ethash_params_load(ini);

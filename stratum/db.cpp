@@ -257,6 +257,7 @@ void db_update_coinds(YAAMP_DB *db)
 		if(row[10]) coind->hassubmitblock = atoi(row[10]);
 
 		coind->rpc.ssl = 0;
+		STRSET(coind->rpc.cert, "");
 		// deprecated method to set ssl and cert (before db specific fields)
 		if(row[2]) {
 			char buffer[1024];
@@ -275,7 +276,6 @@ void db_update_coinds(YAAMP_DB *db)
 				coind->rpc.ssl = 1;
 				STRFMT(coind->rpc.cert, "/usr/share/ca-certificates/%s.crt", cert);
 			}
-			STRSET(coind->rpc.cert, "");
 			STRSET(coind->rpc.host, buffer);
 		}
 
@@ -316,8 +316,9 @@ void db_update_coinds(YAAMP_DB *db)
 		if(row[27]) STRSET(coind->symbol2, row[27]); // if pool + aux, prevent double submit
 
 		if(row[28]) coind->rpc.curl = atoi(row[28]) != 0;
-		if(row[29]) coind->rpc.ssl = atoi(row[29]) != 0;
-		if(row[30]) STRSET(coind->rpc.cert, row[30]);
+		// rpcssl/rpccert add to an https:// rpchost, they don't reset it
+		if(row[29] && atoi(row[29])) coind->rpc.ssl = 1;
+		if(row[30] && row[30][0]) STRSET(coind->rpc.cert, row[30]);
 
 		if(row[31]) STRSET(coind->account, row[31]);
 		if(row[32]) coind->multialgos = atoi(row[32]);

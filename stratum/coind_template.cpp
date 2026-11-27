@@ -290,7 +290,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 
 	if (is_firopow) {
 		// Kiiro Core requires explicit segwit rule support in the GBT request.
-		sprintf(params, "[{\"mode\":\"template\",\"rules\":[\"segwit\"]},\"%s\"]", coind->wallet);
+		STRFMT(params, "[{\"mode\":\"template\",\"rules\":[\"segwit\"]},\"%s\"]", coind->wallet);
 	}
 	else if (is_randomscash) {
 		// Scash Core rejects template requests without the segwit rule

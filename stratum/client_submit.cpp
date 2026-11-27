@@ -150,11 +150,11 @@ void build_submit_values_equihash(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMP
 		const char *nonce1, const char *ntime, const char *nonce, const char *equihash_solution)
 {
 
-	sprintf(submitvalues->coinbase, "%s", templ->coinbase);
+	STRSET(submitvalues->coinbase, templ->coinbase);
 	int coinbase_len = strlen(submitvalues->coinbase);
 
-	unsigned char coinbase_bin[2048];
-	memset(coinbase_bin, 0, 2048);
+	unsigned char coinbase_bin[sizeof(submitvalues->coinbase)/2];
+	memset(coinbase_bin, 0, sizeof(coinbase_bin));
 	binlify(coinbase_bin, submitvalues->coinbase);
 
 	char doublehash[128];
@@ -198,7 +198,7 @@ void build_submit_values_equihash(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMP
 				finalsaplingroot_reversed,
 				time_reversed, bits_reversed, nonce1, nonce);
 
-	sprintf(submitvalues->solution_hex,"%s", equihash_solution);
+	STRSET(submitvalues->solution_hex, equihash_solution);
 	binlify((unsigned char*)submitvalues->solution_bin, submitvalues->solution_hex);
 
 	// strip solution size
@@ -214,7 +214,7 @@ void build_submit_values_equihash(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMP
 	// header_be contains full header+solution, not bigendian header
 	static char header_solution_bin[8192]; memset(header_solution_bin,0,8192);
 
-	sprintf(submitvalues->header_be, "%s%s", submitvalues->header, equihash_solution);
+	STRFMT(submitvalues->header_be, "%s%s", submitvalues->header, equihash_solution);
 	int header_solution_len = strlen(submitvalues->header_be)/2;
 	binlify((unsigned char*)header_solution_bin, submitvalues->header_be);
 
@@ -431,18 +431,18 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 		
 		if (!strcmp("sha256csm", g_current_algo->name)) 
 		{
-			sprintf(block_hex, "%s%s%s%s", submitvalues->header_be, "0000000000000000000000000000000000000000000000000000000000000000", count_hex, submitvalues->coinbase);
+			snprintf(block_hex, block_size, "%s%s%s%s", submitvalues->header_be, "0000000000000000000000000000000000000000000000000000000000000000", count_hex, submitvalues->coinbase);
 		} else if(!strcmp(g_stratum_algo, "neoscrypt-xaya")) {
 				string_be(templ->nbits,&templ->xaya_nbits[0]);
-				sprintf(block_hex, "%s02%s%s%s%s", submitvalues->xaya_header, templ->xaya_nbits,
+				snprintf(block_hex, block_size, "%s02%s%s%s%s", submitvalues->xaya_header, templ->xaya_nbits,
 				submitvalues->header, count_hex, templ->xaya_coinbase);
 		} else {
-			sprintf(block_hex, "%s%s%s", submitvalues->header_be, count_hex, submitvalues->coinbase);
+			snprintf(block_hex, block_size, "%s%s%s", submitvalues->header_be, count_hex, submitvalues->coinbase);
 		}
 
 		if (g_current_algo->name && !strcmp("jha", g_current_algo->name)) {
 			// block header of 88 bytes
-			sprintf(block_hex, "%s8400000008000000%s%s", submitvalues->header_be, count_hex, submitvalues->coinbase);
+			snprintf(block_hex, block_size, "%s8400000008000000%s%s", submitvalues->header_be, count_hex, submitvalues->coinbase);
 		}
 
 		vector<string>::const_iterator i;
@@ -641,7 +641,7 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 	if (json_params->u.array.length == 6) {
 		if (strstr(g_stratum_algo, "sha256")) {
 			// get versionbits for asicboost
-			strncpy(versionbits, json_params->u.array.values[5]->u.string.ptr, 32);
+			strncpy(versionbits, json_params->u.array.values[5]->u.string.ptr, sizeof(versionbits) - 1);
 			string_lower(versionbits);
 			versionmask = strtoul(versionbits, NULL, 16);
 		}

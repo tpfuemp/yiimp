@@ -101,7 +101,7 @@ static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxha
 				RETURN_ON_CONDITION(i == YAAMP_JOB_MAXSUBIDS, false);
 			}
 
-			sprintf(client->extranonce1, "%s%02x", remote->nonce1, client->extranonce1_id);
+			RETURN_ON_CONDITION(!STRFMT(client->extranonce1, "%s%02x", remote->nonce1, client->extranonce1_id), false);
 			client->extranonce2size = remote->nonce2size-1;
 			client->difficulty_remote = difficulty_remote;
 		}
