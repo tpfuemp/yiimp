@@ -3,7 +3,7 @@
 # Sources, flags and libraries are read from ../GNUmakefile at make time,
 # so new algo sources are picked up without editing this file.
 #
-#   make -C tests check        hash vectors + reference KATs + templates (plain build)
+#   make -C tests check        hash vectors + reference KATs + XHash vectors + templates (plain build)
 #   make -C tests vectors      re-generate the golden masters (review the diff!)
 #   make -C tests hardened     same tools + stratum, -O2 -D_FORTIFY_SOURCE=3
 #                              -fstack-protector-strong; then runs overflow cases
@@ -88,13 +88,14 @@ OBJ_MAIN   := $(OUT)/stratum.o
 HASHCHECK  := $(OUT)/hashcheck
 TEMPLCHECK := $(OUT)/templcheck
 PPCHECK    := $(OUT)/progpowcheck
+XHASHCHECK := $(OUT)/xhashcheck
 STRATUM    := $(OUT)/stratum
 
 .PHONY: all tools libs check vectors hardened asan warnings clean \
-        check-hash check-ref check-templ check-progpow overflow
+        check-hash check-ref check-templ check-progpow check-xhash overflow
 .DEFAULT_GOAL := check
 
-all tools: $(HASHCHECK) $(TEMPLCHECK) $(PPCHECK)
+all tools: $(HASHCHECK) $(TEMPLCHECK) $(PPCHECK) $(XHASHCHECK)
 
 libs:
 	$(MAKE) -C $(TOP) libs
@@ -124,6 +125,12 @@ $(PPCHECK): $(OUT)/tests/progpowcheck.o $(OBJ_NOMAIN) $(OBJ_CORE) | libs
 $(TEMPLCHECK): $(OUT)/tests/templcheck.o $(OUT)/tests/rpc_mock.o $(OBJ_NOMAIN) $(filter-out $(OBJ_RPC),$(OBJ_CORE)) | libs
 	$(TOP_CXX) -no-pie $^ $(LIBS) $(XLDFLAGS) -o $@
 
+# XHash vectors link only the vendored library: no stratum or RPC dependencies.
+XHASH_OBJS := $(filter $(OUT)/third_party/xhash/%,$(OBJ_CORE))
+
+$(XHASHCHECK): $(OUT)/tests/xhashcheck.o $(XHASH_OBJS)
+	$(TOP_CXX) -no-pie $^ $(XLDFLAGS) -o $@
+
 $(STRATUM): $(OBJ_MAIN) $(OBJ_CORE) | libs
 	$(TOP_CXX) -no-pie $^ $(LIBS) $(XLDFLAGS) -o $@
 
@@ -131,7 +138,7 @@ $(STRATUM): $(OBJ_MAIN) $(OBJ_CORE) | libs
 FIXTURES := $(sort $(dir $(wildcard fixtures/*/coind.conf)))
 OVERFLOW := $(sort $(dir $(wildcard overflow/*/coind.conf)))
 
-check: check-ref check-hash check-templ check-progpow overflow
+check: check-ref check-hash check-templ check-progpow check-xhash overflow
 
 check-ref: $(HASHCHECK)
 	$(HASHCHECK) --reference vectors/reference.txt
@@ -153,6 +160,9 @@ check-templ: $(TEMPLCHECK)
 	    echo "TEMPL ok   $$d"; \
 	  else echo "TEMPL FAIL $$d"; grep '^template=' $(OUT)/templ.out || cat $(OUT)/templ.diff; fail=1; fi; \
 	done; exit $$fail
+
+check-xhash: $(XHASHCHECK)
+	$(XHASHCHECK)
 
 # golden masters from the current code; review `git diff` before committing
 vectors: $(HASHCHECK) $(TEMPLCHECK) $(PPCHECK)

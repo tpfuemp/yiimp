@@ -1,7 +1,7 @@
 
 CC= gcc -no-pie 
 
-CFLAGS= -g -march=native -I./ -Ithird_party/randomx/src
+CFLAGS= -g -march=native -I./ -Ithird_party/randomx/src -Ithird_party/xhash/include
 SQLFLAGS= `mysql_config --cflags --libs`
 
 #CFLAGS=-c -O2 -I /usr/include/mysql
@@ -21,8 +21,11 @@ SOURCES_MERAKI_CPP=$(PP)/meraki/lib/meraki/meraki.cpp $(PP)/meraki/lib/meraki/ma
 SOURCES_MERAKI=$(SOURCES_MERAKI_C) $(SOURCES_MERAKI_CPP)
 SOURCES_HOMESCRYPT=algos/misc/homescrypt.cpp
 SOURCES_RANDOMSCASH=algos/randomx/randomscash.cpp
-SOURCES_ETHASH=protocol/ethash/params.cpp protocol/ethash/context.cpp protocol/ethash/work.cpp
-SOURCES_NEBHASH_C=algos/nebhash/blake3_min.c algos/nebhash/chacha8.c algos/nebhash/nebhash2.c algos/nebhash/shares.c
+SOURCES_ETHASH=protocol/ethash/params.cpp protocol/ethash/context.cpp protocol/ethash/engine.cpp protocol/ethash/work.cpp
+SOURCES_XHASH_C=third_party/xhash/lib/keccak/keccak.c third_party/xhash/lib/sha3/sha3.c third_party/xhash/lib/xhash/primes.c
+SOURCES_XHASH_CPP=third_party/xhash/lib/xhash/xhash.cpp
+SOURCES_XHASH=$(SOURCES_XHASH_C) $(SOURCES_XHASH_CPP)
+SOURCES_NEBHASH_C=algos/nebhash/blake3_shared.c algos/nebhash/chacha8.c algos/nebhash/nebhash2.c algos/nebhash/shares.c
 SOURCES_NEBHASH_CPP=protocol/nebhash/work.cpp
 SOURCES_NEBHASH=$(SOURCES_NEBHASH_C) $(SOURCES_NEBHASH_CPP)
 
@@ -33,7 +36,7 @@ SOURCES += rpc_curl.cpp
 #LDCURL = $(shell /usr/bin/pkg-config --static --libs libcurl)
 #LDFLAGS += $(LDCURL)
 
-OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_MERAKI_C:.c=.o) $(SOURCES_MERAKI_CPP:.cpp=.o) $(SOURCES_ETHASH:.cpp=.o) $(SOURCES_HOMESCRYPT:.cpp=.o) $(SOURCES_RANDOMSCASH:.cpp=.o) $(SOURCES_NEBHASH_C:.c=.o) $(SOURCES_NEBHASH_CPP:.cpp=.o)
+OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_KAWPOW:.cpp=.o) $(SOURCES_MERAKI_C:.c=.o) $(SOURCES_MERAKI_CPP:.cpp=.o) $(SOURCES_ETHASH:.cpp=.o) $(SOURCES_XHASH_C:.c=.o) $(SOURCES_XHASH_CPP:.cpp=.o) $(SOURCES_HOMESCRYPT:.cpp=.o) $(SOURCES_RANDOMSCASH:.cpp=.o) $(SOURCES_NEBHASH_C:.c=.o) $(SOURCES_NEBHASH_CPP:.cpp=.o)
 OUTPUT=stratum
 
 CODEDIR1=algos
@@ -82,8 +85,9 @@ $(SOURCES_KAWPOW) $(PP)/meraki/lib/meraki/progpow.cpp: $(PP)/core.hpp
 $(SOURCES_MERAKI): stratum.h $(PP)/meraki/hash.h $(PP)/meraki/helpers.hpp protocol/meraki/meraki.h $(PP)/meraki/lib/meraki/meraki.hpp $(PP)/meraki/lib/meraki/progpow.hpp
 $(SOURCES_HOMESCRYPT): stratum.h algos/misc/homescrypt.h
 $(SOURCES_RANDOMSCASH): stratum.h algos/randomx/randomscash.h third_party/randomx/src/randomx.h
-$(SOURCES_ETHASH): stratum.h protocol/ethash/params.h protocol/ethash/context.h protocol/ethash/work.h
-$(SOURCES_NEBHASH): stratum.h protocol/nebhash/work.h algos/nebhash/shares.h algos/nebhash/nebhash2.h algos/nebhash/blake3_min.h algos/nebhash/chacha8.h
+$(SOURCES_ETHASH): stratum.h protocol/ethash/params.h protocol/ethash/context.h protocol/ethash/engine.h protocol/ethash/work.h
+$(SOURCES_XHASH): stratum.h third_party/xhash/include/xhash/xhash.h third_party/xhash/include/xhash/xhash.hpp
+$(SOURCES_NEBHASH): stratum.h protocol/nebhash/work.h algos/nebhash/shares.h algos/nebhash/nebhash2.h algos/nebhash/blake3_shared.h algos/nebhash/chacha8.h
 
 # HomeScrypt v1.2 consensus needs exact IEEE-754 fmaf rounding: no FMA
 # contraction or fast-math for it
@@ -109,7 +113,7 @@ clean:
 	rm -f third_party/sph/*.o third_party/sph/*.a
 	find algos third_party/keccak-xkcp third_party/blake2-ref third_party/blake3 third_party/SWIFFTX -name '*.o' -delete
 	rm -f algos/xelisv2-pepew/*.o
-	find protocol -name '*.o' -delete
+	find protocol third_party/xhash -name '*.o' -delete
 	rm -rf third_party/randomx/build third_party/randomx/librandomx.a
 	
 install:

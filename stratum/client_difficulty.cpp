@@ -250,6 +250,10 @@ int client_send_difficulty(YAAMP_CLIENT *client, double difficulty)
 		client->share_target = ethash_be_to_uint256(target_be);
 		client->next_target = client->share_target;
 
+		// ccminer's XHash path reads the target from each mining.notify, so a
+		// numeric set_difficulty is neither needed nor interpreted there
+		if (client->is_xhash_kawpow) return 0;
+
 		// ethproxy reads the target from its work: the next push carries it
 		if (client->is_ethproxy) return 0;
 

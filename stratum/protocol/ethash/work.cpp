@@ -4,6 +4,7 @@
 #include "stratum.h"
 #include "params.h"
 #include "context.h"
+#include "engine.h"
 #include "work.h"
 
 #include <algos/progpow/include/ethash/ethash.hpp>
@@ -32,6 +33,42 @@ static void ethash_bin_to_hex(const uint8_t be[32], char *hex66)
 		hex66[3 + i * 2] = digits[be[i] & 0xf];
 	}
 	hex66[66] = 0;
+}
+
+// KawPoW-family miners use nbits only to decide that a job has data and to
+// display network difficulty. XHash has no compact powlimit in the database,
+// so derive a standard compact form from the network boundary sent by the node.
+static void ethash_target_bits(const char *target_hex, char out[9])
+{
+	uint8_t be[32];
+	if (!ethash_parse_hex(target_hex, be))
+	{
+		snprintf(out, 9, "207fffff");
+		return;
+	}
+
+	int first = 0;
+	while (first < 32 && be[first] == 0) first++;
+	if (first == 32)
+	{
+		snprintf(out, 9, "00000001");
+		return;
+	}
+
+	int nbytes = 32 - first;
+	uint32_t mantissa = ((uint32_t)be[first] << 16) |
+		((uint32_t)(first + 1 < 32 ? be[first + 1] : 0) << 8) |
+		(first + 2 < 32 ? be[first + 2] : 0);
+	if (first + 3 < 32 && be[first + 3] >= 0x80)
+	{
+		mantissa++;
+		if (mantissa & 0x1000000)
+		{
+			mantissa >>= 8;
+			nbytes++;
+		}
+	}
+	snprintf(out, 9, "%08x", ((uint32_t)nbytes << 24) | (mantissa & 0xffffff));
 }
 
 const char *ethash_strip_prefix(const char *src)
@@ -85,22 +122,25 @@ bool ethash_build_template(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ)
 	if (!coind || !templ)
 		return false;
 
-	json_value *json = rpc_call(&coind->rpc, "eth_getWork", "[]", coind);
+	const ETHASH_ENGINE *engine = ethash_engine();
+	json_value *json = rpc_call(&coind->rpc, engine->getwork_method, "[]", coind);
 	if (!json)
 	{
-		debuglog("ethash: %s eth_getWork failed\n", coind->symbol);
+		debuglog("%s: %s %s failed\n", engine->name, coind->symbol, engine->getwork_method);
 		return false;
 	}
 
+	// xhash_getWork adds the mined block number as a fourth field
+	const int work_fields = engine->work_includes_height ? 4 : 3;
 	json_value *work = json_get_object(json, "result");
-	if (!work || work->type != json_array || work->u.array.length < 3)
+	if (!work || work->type != json_array || work->u.array.length < (unsigned) work_fields)
 	{
-		debuglog("ethash: %s eth_getWork returned no work\n", coind->symbol);
+		debuglog("%s: %s %s returned no work\n", engine->name, coind->symbol, engine->getwork_method);
 		json_value_free(json);
 		return false;
 	}
 
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < work_fields; i++)
 	{
 		json_value *v = work->u.array.values[i];
 		if (!v || v->type != json_string || !v->u.string.ptr)
@@ -111,9 +151,12 @@ bool ethash_build_template(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ)
 	}
 
 	char header_str[80] = { 0 }, seed_str[80] = { 0 }, target_str[80] = { 0 };
+	char height_str[64] = { 0 };
 	snprintf(header_str, sizeof(header_str), "%s", work->u.array.values[0]->u.string.ptr);
 	snprintf(seed_str, sizeof(seed_str), "%s", work->u.array.values[1]->u.string.ptr);
 	snprintf(target_str, sizeof(target_str), "%s", work->u.array.values[2]->u.string.ptr);
+	if (engine->work_includes_height)
+		snprintf(height_str, sizeof(height_str), "%s", work->u.array.values[3]->u.string.ptr);
 	json_value_free(json);
 
 	uint8_t header_be[32], seed_be[32], target_be[32];
@@ -125,34 +168,43 @@ bool ethash_build_template(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ)
 		!ethash_parse_hex(seed, seed_be) ||
 		!ethash_parse_hex(target, target_be))
 	{
-		debuglog("ethash: %s eth_getWork returned malformed work\n", coind->symbol);
+		debuglog("%s: %s %s returned malformed work\n", engine->name, coind->symbol, engine->getwork_method);
 		return false;
 	}
 
-	// eth_getWork has no height; use the pending block number when available.
+	// xhash_getWork carries the mined block number; classic eth_getWork has
+	// none, so use the pending block number when available.
 	int height = 0;
-	char number[64] = { 0 };
-	if (ethash_rpc_hex("eth_blockNumber", coind, number, sizeof(number)))
+	if (engine->work_includes_height && height_str[0])
+		height = (int) strtoul(ethash_strip_prefix(height_str), NULL, 16);
+	else
 	{
-		const char *p = ethash_strip_prefix(number);
-		if (*p)
-			height = (int) strtoul(p, NULL, 16) + 1;
+		char number[64] = { 0 };
+		if (ethash_rpc_hex("eth_blockNumber", coind, number, sizeof(number)))
+		{
+			const char *p = ethash_strip_prefix(number);
+			if (*p)
+				height = (int) strtoul(p, NULL, 16) + 1;
+		}
 	}
 
-	// The seed hash is authoritative: it identifies the epoch the node is
-	// actually mining on, including across ECIP-1099 forks.
-	int epoch = ethash::find_epoch_number(ethash_to_hash256(seed));
-	if (epoch < 0)
-		epoch = ethash_epoch_for_height(height);
+	// The seed hash identifies the epoch the node is actually mining on
+	// (including across ECIP-1099 forks). Classic Ethash can reverse it; XHash
+	// derives the epoch from the work height and checks the seed below.
+	int epoch = engine->epoch_from_work(height, seed_be);
 
-	if (strcmp(to_hex(ethash::calculate_epoch_seed(epoch)).c_str(), seed) != 0)
+	uint8_t expected_seed[32];
+	engine->seed_for_epoch(epoch, expected_seed);
+	if (memcmp(expected_seed, seed_be, 32) != 0)
 	{
-		// The seed hash is what the miner sees in mining.notify, so it is the
-		// authoritative source for the verification context. Falling back to
-		// the height-derived epoch here would verify against a different DAG
-		// and reject every share on chains with custom epoch timing.
-		stratumlog("ethash: seed/epoch mismatch for %s (seed epoch %d, height %d)\n",
-			coind->symbol, epoch, ethash_epoch_for_height(height));
+		// The seed hash is what the miner sees in mining.notify, so it must
+		// match the verification context: a mismatch would reject every share
+		// against a different cache. XHash has no reverse seed lookup, so its
+		// height-derived epoch and the node seed have to agree.
+		stratumlog("%s: seed/epoch mismatch for %s (epoch %d, height %d)\n",
+			engine->name, coind->symbol, epoch, height);
+		if (engine->require_exact_seed)
+			return false;
 	}
 
 	ethash_bin_to_hex(header_be, templ->eth_header);
@@ -196,6 +248,33 @@ void ethash_job_mining_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char 
 		"{\"id\":null,\"method\":\"mining.notify\",\"params\":"
 		"[\"%s\",\"%s\",\"%s\",true]}\n",
 		jobid, seed, header);
+}
+
+// ccminer's XHash path uses the KawPoW-family wire layout:
+// [job_id, header_hash, seed_hash, target, clean, height, nbits]. The job id
+// is 16 hex digits and the miner strips the first 8; the submit then carries
+// no resend generation (see ethash_submit). Only ccminer-kudaraidee sessions
+// get this shape.
+void ethash_kawpow_job_mining_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char *buffer, int gen)
+{
+	YAAMP_JOB_TEMPLATE *templ = job->templ;
+	char jobid[32];
+	snprintf(jobid, sizeof(jobid), "%08x%08x",
+		gen > 0 && gen < YAAMP_RESEND_MAX ? gen : 0, job->id);
+
+	std::string target = client && !client->share_target.IsNull() ?
+		client->share_target.ToString() :
+		"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+	char nbits[9];
+	if (templ->nbits[0] && strlen(templ->nbits) == 8)
+		snprintf(nbits, sizeof(nbits), "%s", templ->nbits);
+	else
+		ethash_target_bits(templ->eth_target, nbits);
+
+	sprintf(buffer,
+		"{\"id\":null,\"method\":\"mining.notify\",\"params\":"
+		"[\"%s\",\"%s\",\"%s\",\"%s\",true,%d,\"%s\"]}\n",
+		jobid, templ->eth_header, templ->eth_seed, target.c_str(), templ->height, nbits);
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +425,7 @@ bool ethash_submit_work(YAAMP_COIND *coind, int height, const char *nonce,
 		ethash_rpc_hex(header, header_hex, sizeof(header_hex)),
 		ethash_rpc_hex(mix, mix_hex, sizeof(mix_hex)));
 
-	json_value *json = rpc_call(&coind->rpc, "eth_submitWork", params, coind);
+	json_value *json = rpc_call(&coind->rpc, ethash_engine()->submitwork_method, params, coind);
 	if (!json)
 		return false;
 
@@ -369,13 +448,14 @@ static bool ethash_meets(const uint256 &hash, double diff)
 }
 
 // Difficulty the share is credited at, 0 if too low: the one the miner had for
-// this job (client_share_difficulty). ethproxy has no job id, so a share in
-// flight across a difficulty change may only meet the other (lower) one.
+// this job (client_share_difficulty). ethproxy has no job id and ccminer's
+// XHash path drops the generation from it, so a share in flight across a
+// difficulty change may only meet the other (lower) one.
 static double ethash_share_difficulty(YAAMP_CLIENT *client, YAAMP_JOB *job, int gen, const uint256 &hash)
 {
 	double diff = client_share_difficulty(client, job, gen);
 	if (ethash_meets(hash, diff)) return diff;
-	if (!client->is_ethproxy) return 0;
+	if (!client->is_ethproxy && !client->is_xhash_kawpow) return 0;
 
 	double other = (diff == client->difficulty_actual) ? client->difficulty_prev : client->difficulty_actual;
 	if (other < diff && ethash_meets(hash, other)) return other;
@@ -537,13 +617,15 @@ bool ethash_ethproxy_submit_work(YAAMP_CLIENT *client, json_value *json_params)
 		return true;
 	}
 
-	const ethash::hash256 header_hash = ethash_to_hash256(templ->eth_header);
+	uint8_t header_be[32];
 	const uint64_t nonce64 = strtoull(nonce, NULL, 16);
-	const ethash::result result = ethash::hash(*context, header_hash, nonce64);
-
 	uint8_t final_be[32], mix_be[32];
-	memcpy(final_be, result.final_hash.bytes, 32);
-	memcpy(mix_be, result.mix_hash.bytes, 32);
+	if (!ethash_parse_hex(templ->eth_header, header_be))
+	{
+		reject_share("invalid job header", 20);
+		return true;
+	}
+	ethash_engine()->hash(context.get(), header_be, nonce64, final_be, mix_be);
 
 	if (memcmp(submitted_mix_be, mix_be, 32) != 0)
 	{
@@ -594,7 +676,7 @@ bool ethash_submit(YAAMP_CLIENT *client, json_value *json_params)
 	const char *nonce_part = ethash_strip_prefix(
 		json_params->u.array.values[2]->u.string.ptr);
 	const int jobid = htoi(json_params->u.array.values[1]->u.string.ptr);
-	const int gen = client_jobid_gen(json_params->u.array.values[1]->u.string.ptr);
+	int gen = client_jobid_gen(json_params->u.array.values[1]->u.string.ptr);
 	const int prefix_len = strlen(client->extranonce1);
 	const size_t part_len = strlen(nonce_part);
 
@@ -623,6 +705,11 @@ bool ethash_submit(YAAMP_CLIENT *client, json_value *json_params)
 		return true;
 	}
 
+	// ccminer's XHash job id carries no generation: as for ethproxy, the
+	// last resend of the job is the one the miner works on
+	if (client->is_xhash_kawpow)
+		gen = (client->resend_jobid == job->id) ? client->resend_gen : 0;
+
 	YAAMP_JOB_TEMPLATE *templ = job->templ;
 	if (job->deleted)
 	{
@@ -645,12 +732,13 @@ bool ethash_submit(YAAMP_CLIENT *client, json_value *json_params)
 		return true;
 	}
 
-	const ethash::hash256 header = ethash_to_hash256(templ->eth_header);
-	const ethash::result result = ethash::hash(*context, header, nonce64);
-
-	uint8_t final_be[32], mix_be[32];
-	memcpy(final_be, result.final_hash.bytes, 32);
-	memcpy(mix_be, result.mix_hash.bytes, 32);
+	uint8_t header_be[32], final_be[32], mix_be[32];
+	if (!ethash_parse_hex(templ->eth_header, header_be))
+	{
+		client_submit_error(client, job, 20, "Invalid job header", empty, empty, nonce);
+		return true;
+	}
+	ethash_engine()->hash(context.get(), header_be, nonce64, final_be, mix_be);
 
 	uint256 final_hash = ethash_be_to_uint256(final_be);
 	char mixhex[80] = { 0 };
@@ -688,4 +776,147 @@ bool ethash_submit(YAAMP_CLIENT *client, json_value *json_params)
 
 	object_unlock(job);
 	return true;
+}
+
+// Malformed ccminer XHash submits: logged with their parameter shapes, at
+// most 10 times a minute (miner input can fail on every submit), and with
+// control characters replaced so a miner cannot break the log line.
+static void ethash_kawpow_log_bad_submit(YAAMP_CLIENT *client, json_value *json_params)
+{
+	static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+	static time_t window = 0;
+	static int logged = 0;
+	const time_t now = time(NULL);
+	pthread_mutex_lock(&mutex);
+	if (now - window >= 60) { window = now; logged = 0; }
+	const bool log = logged < 10;
+	if (log) logged++;
+	pthread_mutex_unlock(&mutex);
+	if (!log) return;
+
+	char raw[768] = { 0 };
+	size_t off = 0;
+
+	if (!json_params || json_params->type != json_array)
+		snprintf(raw, sizeof(raw), "no array params");
+	else
+	{
+		int n = snprintf(raw, sizeof(raw), "len=%d", json_params->u.array.length);
+		if (n > 0) off = (size_t) n;
+		const int count = json_params->u.array.length < 6 ? json_params->u.array.length : 6;
+		for (int i = 0; i < count && off < sizeof(raw); i++)
+		{
+			json_value *v = json_params->u.array.values[i];
+			if (json_is_string(v))
+				n = snprintf(raw + off, sizeof(raw) - off, " [%d]=s:%.64s", i, json_string_value(v));
+			else if (json_is_integer(v))
+				n = snprintf(raw + off, sizeof(raw) - off, " [%d]=i:%lld", i, (long long) json_integer_value(v));
+			else
+				n = snprintf(raw + off, sizeof(raw) - off, " [%d]=type%d", i, (int) v->type);
+			if (n <= 0) break;
+			off += (size_t) n;
+		}
+	}
+	for (char *c = raw; *c; c++)
+		if ((unsigned char) *c < 0x20 || (unsigned char) *c == 0x7f) *c = '?';
+
+	debuglog("%s - %s xhash kawpow: bad submit %s\n", client->username, client->sock->ip, raw);
+}
+
+// ccminer XHash submit: [worker, job_id, nonce, header, mix, ...], with the
+// job id stripped to its last 8 digits. Normalized into the EthereumStratum
+// [worker, job_id, nonce, mix] form for ethash_submit(). Some forks send that
+// form directly, and some append a numeric difficulty or ticket id.
+bool ethash_kawpow_submit(YAAMP_CLIENT *client, json_value *json_params)
+{
+	if (!json_params || json_params->type != json_array)
+	{
+		ethash_kawpow_log_bad_submit(client, json_params);
+		client->submit_bad++;
+		return false;
+	}
+
+	const int len = json_params->u.array.length;
+	if (len == 3 || len == 4)
+	{
+		for (int i = 0; i < len; i++)
+		{
+			if (!json_is_string(json_params->u.array.values[i]))
+			{
+				ethash_kawpow_log_bad_submit(client, json_params);
+				client->submit_bad++;
+				return false;
+			}
+		}
+		return ethash_submit(client, json_params);
+	}
+
+	if (len < 5)
+	{
+		ethash_kawpow_log_bad_submit(client, json_params);
+		client->submit_bad++;
+		return false;
+	}
+
+	char jobidbuf[32] = { 0 };
+	char noncebuf[32] = { 0 };
+	const char *jobid_str = NULL;
+	const char *nonce = NULL;
+	const char *mix = NULL;
+	json_value *vjob = json_params->u.array.values[1];
+	json_value *vnonce = json_params->u.array.values[2];
+	json_value *vmix = json_params->u.array.values[4];
+
+	if (json_is_string(vjob))
+		jobid_str = json_string_value(vjob);
+	else if (json_is_integer(vjob))
+	{
+		snprintf(jobidbuf, sizeof(jobidbuf), "%x", (unsigned int) json_integer_value(vjob));
+		jobid_str = jobidbuf;
+	}
+
+	if (json_is_string(vnonce))
+		nonce = ethash_strip_prefix(json_string_value(vnonce));
+	else if (json_is_integer(vnonce))
+	{
+		snprintf(noncebuf, sizeof(noncebuf), "%016llx", (unsigned long long) json_integer_value(vnonce));
+		nonce = noncebuf;
+	}
+
+	if (json_is_string(vmix))
+		mix = ethash_strip_prefix(json_string_value(vmix));
+
+	if (!jobid_str || !nonce || !mix)
+	{
+		ethash_kawpow_log_bad_submit(client, json_params);
+		client->submit_bad++;
+		return false;
+	}
+
+	// the miner strips the 8-digit prefix; accept the unstripped id as well
+	const char *shortjob = strlen(jobid_str) > 8 ? jobid_str + 8 : jobid_str;
+	const int jobid = htoi(shortjob);
+
+	if (jobid <= 0 || strlen(nonce) != 16 || !ishexa((char *) nonce, 16) ||
+		strlen(mix) != 64 || !ishexa((char *) mix, 64))
+	{
+		client_send_error(client, 20, "Invalid XHash submit");
+		client->submit_bad++;
+		return true;
+	}
+
+	char normalized[256] = { 0 };
+	snprintf(normalized, sizeof(normalized), "[\"xhash\",\"%x\",\"%s\",\"%s\"]", jobid, nonce, mix);
+
+	json_value *params = json_parse(normalized, strlen(normalized));
+	if (!params)
+	{
+		client_send_error(client, 20, "Invalid XHash submit");
+		client->submit_bad++;
+		return true;
+	}
+
+	bool ok = ethash_submit(client, params);
+	json_value_free(params);
+	return ok;
 }

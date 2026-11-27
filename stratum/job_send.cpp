@@ -185,8 +185,9 @@ static const char *job_notify_buffer(YAAMP_JOB *job, YAAMP_CLIENT *client, char 
 		return neb_buffer;
 	}
 
-
-	if (is_eth && client->is_ethproxy)
+	if (is_eth && client->is_xhash_kawpow)
+		ethash_kawpow_job_mining_notify_buffer(job, client, buffer, gen);
+	else if (is_eth && client->is_ethproxy)
 		ethash_ethproxy_work_buffer(job, client, buffer);
 	else if (is_eth)
 		ethash_job_mining_notify_buffer(job, client, buffer, gen);

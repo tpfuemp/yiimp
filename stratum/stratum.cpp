@@ -1,4 +1,5 @@
 #include "stratum.h"
+#include "protocol/ethash/engine.h"
 #include <signal.h>
 #include <sys/resource.h>
 
@@ -40,6 +41,7 @@ int g_sql_port = 3306;
 
 char g_stratum_coin_include[256];
 char g_stratum_coin_exclude[256];
+int g_stratum_forced_coinid = 0;
 
 char g_stratum_algo[256];
 double g_stratum_difficulty;
@@ -271,6 +273,8 @@ int main(int argc, char **argv)
 	else
 		g_autoexchange = true;
 
+	g_stratum_forced_coinid = iniparser_getint(ini, "STRATUM:coinid", 0);
+
 	// optional coin filters (to mine only one on a special port or a test instance)
 	config_ok &= ini_string(ini, "WALLETS:include", g_stratum_coin_include);
 	config_ok &= ini_string(ini, "WALLETS:exclude", g_stratum_coin_exclude);
@@ -306,8 +310,15 @@ int main(int argc, char **argv)
 	config_ok &= ini_string(ini, "STRATUM:logdir", g_log_directory);
 	if (!config_ok) return 1;
 
-	if (!strcmp(g_stratum_algo, "ethash") || !strcmp(g_stratum_algo, "etchash"))
-		ethash_params_load(ini);
+	// Select the chain-specific backend before any template/submit can run.
+	// Parallax keeps eth_* block queries but uses xhash_* mining RPCs.
+	if (!strcmp(g_stratum_algo, "ethash") || !strcmp(g_stratum_algo, "etchash") ||
+		!strcmp(g_stratum_algo, "xhash"))
+	{
+		ethash_engine_select(g_stratum_algo);
+		if (strcmp(g_stratum_algo, "xhash"))
+			ethash_params_load(ini);
+	}
 
 	if (!strcmp(g_stratum_algo, "nebhash"))
 	{

@@ -584,7 +584,11 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 		return nebhash_submit(client, json_params);
 
 	if (is_eth)
+	{
+		if (client->is_xhash_kawpow)
+			return ethash_kawpow_submit(client, json_params);
 		return ethash_submit(client, json_params);
+	}
 
 	if (is_meraki)
 		return meraki_submit(client, json_params);

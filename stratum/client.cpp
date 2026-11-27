@@ -95,6 +95,12 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 		if(strstr(client->version, "proxy") || strstr(client->version, "/3."))
       client->reconnectable = false;
 
+		// ccminer-kudaraidee implements XHash through its KawPoW-style
+		// subscribe/notify/submit path, not the EthereumStratum/Rigel shape.
+		if (!strcmp(g_stratum_algo, "xhash") &&
+			strstr(client->version, "ccminer-kudaraidee"))
+			client->is_xhash_kawpow = true;
+
 		if(strstr(client->version, "ccminer")) client->stats = true;
 		if(strstr(client->version, "cpuminer-multi")) client->stats = true;
 		if(strstr(client->version, "cpuminer-opt")) client->stats = true;
@@ -194,6 +200,12 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 		nebhash_subscribe_result(client, result, sizeof(result));
 		client_send_result(client, "%s", result);
 	}
+	else if (client->is_xhash_kawpow)
+	{
+		// KawPoW-family subscribe: no session object, just the nonce prefix.
+		// ccminer derives its nonce width from the prefix length itself.
+		client_send_result(client, "[null,\"%s\"]", client->extranonce1);
+	}
 	else if (is_eth)
 	{
 		if (client->is_nicehash_ethstratum)
@@ -252,6 +264,25 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 ///////////////////////////////////////////////////////////////////////////////////////////
 bool client_validate_user_address(YAAMP_CLIENT *client)
 {
+	// A dedicated port can force one coin for every login. This is needed when
+	// two chains share an address format and the account is already bound to
+	// the other chain: an existing binding stays, this session mines the coin
+	// configured on the listener.
+	if (g_stratum_forced_coinid > 0)
+	{
+		YAAMP_COIND *forced = (YAAMP_COIND *) object_find(&g_list_coind, g_stratum_forced_coinid);
+		if (!forced || !coind_can_mine(forced) ||
+			(strlen(g_current_algo->name) && strcmp(g_current_algo->name, forced->algo)) ||
+			!coind_validate_user_address(forced, client->username))
+		{
+			clientlog(client, "unable to use forced coinid %d for %s", g_stratum_forced_coinid, client->username);
+			return false;
+		}
+
+		client->coinid = forced->id;
+		return true;
+	}
+
 	int client_workers = 0;
 	if (client->userid == 0) {
 		client_workers = client_workers_byaddress(client->username);
