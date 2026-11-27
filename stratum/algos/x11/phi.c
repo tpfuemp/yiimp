@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "algos/misc/gost.h"
+#include "third_party/sph/sph_streebog.h"
 
 #include "algos/common/common.h"
 #include "algos/common/sph512.h"

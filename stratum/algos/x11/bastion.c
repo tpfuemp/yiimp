@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include "third_party/sph/sph_hefty1.h"
 #include "algos/common/sph512.h"
 
 #define _ALIGN(x) __attribute__ ((aligned(x)))

@@ -18,7 +18,7 @@
 #include "third_party/sph/sph_shabal.h"
 #include "third_party/sph/sph_whirlpool.h"
 #include "algos/lyra2/Lyra2.h"
-#include "gost.h"
+#include "third_party/sph/sph_streebog.h"
 #include "algos/cryptonight/cryptonight_dark.h"
 #include "algos/cryptonight/cryptonight_dark_lite.h"
 #include "algos/cryptonight/cryptonight_fast.h"

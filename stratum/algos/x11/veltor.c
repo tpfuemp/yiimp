@@ -5,7 +5,7 @@
 
 //#include <sha3/sph_streebog.h>
 
-#include "algos/misc/gost.h"
+#include "third_party/sph/sph_streebog.h"
 #include "algos/common/sph512.h"
 
 void veltor_hash(const char *input, char* output, uint32_t len)

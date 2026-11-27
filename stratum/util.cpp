@@ -427,7 +427,7 @@ void base64_decode(char *normal, const char *base64)
 		if(base64[i] == '=')
 			break;
 
-		unsigned char digit = decoding_tab[base64[i]];
+		unsigned char digit = decoding_tab[(unsigned char) base64[i]];
 
 		current <<= 6;
 		current |= digit;

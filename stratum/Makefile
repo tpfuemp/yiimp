@@ -43,10 +43,14 @@ CODEDIR4=third_party/secp256k1
 CODEDIR5=third_party/randomx
 
 
-.PHONY: projectcode1 projectcode2 projectcode3 projectcode4 projectcode5
+.PHONY: all buildonly gitsubmodules install clean projectcode1 projectcode2 projectcode3 projectcode4 projectcode5
 
-all: gitsubmodules projectcode1 projectcode2 projectcode3 projectcode4 projectcode5 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(SOURCES_RANDOMSCASH) $(SOURCES_NEBHASH) $(OUTPUT)
-buildonly: projectcode1 projectcode2 projectcode3 projectcode4 projectcode5 $(SOURCES) $(SOURCES_KAWPOW) $(SOURCES_MERAKI) $(SOURCES_ETHASH) $(SOURCES_HOMESCRYPT) $(SOURCES_RANDOMSCASH) $(SOURCES_NEBHASH) $(OUTPUT)
+# submodules first, then the build (safe with -j); SELF: GNU make would
+# read GNUmakefile in a sub-make without -f
+SELF := $(firstword $(MAKEFILE_LIST))
+all: gitsubmodules
+	$(MAKE) -f $(SELF) buildonly
+buildonly: $(OUTPUT)
 
 gitsubmodules:
 	git submodule init && git submodule update
@@ -86,7 +90,8 @@ $(SOURCES_NEBHASH): stratum.h protocol/nebhash/work.h algos/nebhash/shares.h alg
 algos/misc/homescrypt.o: algos/misc/homescrypt.cpp stratum.h algos/misc/homescrypt.h
 	$(CC) $(CFLAGS) $(SQLFLAGS) -ffp-contract=off -fno-fast-math -c algos/misc/homescrypt.cpp -o $@
 
-$(OUTPUT): $(OBJECTS)
+# the libraries come from the sub-builds: link only after all of them
+$(OUTPUT): $(OBJECTS) | projectcode1 projectcode2 projectcode3 projectcode4 projectcode5
 	$(CC) $(OBJECTS) $(LDLIBS) $(LDFLAGS) -o $@
 
 .cpp.o:
@@ -107,7 +112,9 @@ clean:
 	find protocol -name '*.o' -delete
 	rm -rf third_party/randomx/build third_party/randomx/librandomx.a
 	
-install: clean all
+install:
+	$(MAKE) -f $(SELF) clean
+	$(MAKE) -f $(SELF) all
 	strip -s stratum
 	cp stratum /usr/local/bin/
 	cp stratum ../bin/

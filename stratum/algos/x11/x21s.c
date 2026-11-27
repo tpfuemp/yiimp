@@ -4,7 +4,7 @@
 #include <third_party/sph/sph_sha2.h>
 #include <third_party/sph/sph_haval.h>
 #include <third_party/sph/sph_tiger.h>
-#include "algos/misc/gost.h"
+#include "third_party/sph/sph_streebog.h"
 #include "algos/lyra2/Lyra2.h"
 #include "algos/common/common.h"
 #include "algos/common/sph512.h"

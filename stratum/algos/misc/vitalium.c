@@ -10,7 +10,7 @@
 #include <third_party/sph/sph_echo.h>
 #include <third_party/sph/sph_shavite.h>
 #include <third_party/sph/sph_luffa.h>
-#include "gost.h"
+#include "third_party/sph/sph_streebog.h"
 
 #include "algos/common/common.h"
 

@@ -23,7 +23,7 @@ SOURCES=lyra2/lyra2re.c lyra2/lyra2v2.c lyra2/Lyra2.c lyra2/lyra2z.c lyra2/lyra2
 	misc/a5a.c misc/a5amath.c misc/m7m.c misc/magimath.cpp misc/velvet.c \
 	argon2/blake2/blake2b.c ../third_party/blake2-ref/blake2s.c argon2/ar2/argon2.c argon2/ar2/core.c argon2/ar2/encoding.c argon2/ar2/opt.c argon2/ar2/thread.c \
 	misc/hive.c misc/pomelo.c x11/hex.c argon2/argon2d.c x11/geek.c x11/bcd.c misc/balloon.c misc/hoohash.c \
-	x11/phi.c x11/phi2.c x11/phi5.c x11/polytimos.c misc/rainforest.c x11/renesis.c x11/skunk.c x11/sib.c x11/veltor.c misc/gost.c misc/aergo.c x11/x22i.c x11/x21s.c x11/lbk3.c misc/pipehash.c x11/dedal.c x11/x20r.c misc/gltalgos.c misc/lane.c x11/x25x.c \
+	x11/phi.c x11/phi2.c x11/phi5.c x11/polytimos.c misc/rainforest.c x11/renesis.c x11/skunk.c x11/sib.c x11/veltor.c misc/aergo.c x11/x22i.c x11/x21s.c x11/lbk3.c misc/pipehash.c x11/dedal.c x11/x20r.c misc/gltalgos.c misc/lane.c x11/x25x.c \
 	misc/beenode.c honeycomb/facet_one.c honeycomb/facet_two.c honeycomb/facet_three.c honeycomb/facet_four.c honeycomb/facet_five.c honeycomb/facet_six.c honeycomb/facets_helper.c \
 	misc/gr.c cryptonight/crypto/aesb.c  cryptonight/crypto/c_blake256.c  cryptonight/crypto/c_groestl.c  cryptonight/crypto/c_jh.c \
 	cryptonight/crypto/c_keccak.c  cryptonight/crypto/c_skein.c  cryptonight/crypto/hash.c  cryptonight/crypto/oaes_lib.c \

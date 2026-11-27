@@ -504,7 +504,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	// temporary hack, until wallet is fixed...
 	if (!strcmp(coind->symbol, "MBL")) { // MBL: chainid in version
 		unsigned int nVersion = (unsigned int)json_get_int(json_result, "version");
-		if (nVersion & 0xFFFF0000UL == 0) {
+		if ((nVersion & 0xFFFF0000UL) == 0) {
 			nVersion |= (0x16UL << 16);
 			debuglog("%s version %s >> %08x\n", coind->symbol, templ->version, nVersion);
 		}

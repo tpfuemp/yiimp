@@ -7,7 +7,7 @@
 #include <third_party/sph/sph_tiger.h>
 
 #include "third_party/SWIFFTX/SWIFFTX.h"
-#include "algos/misc/gost.h"
+#include "third_party/sph/sph_streebog.h"
 #include "algos/lyra2/Lyra2.h"
 
 #include "algos/common/common.h"

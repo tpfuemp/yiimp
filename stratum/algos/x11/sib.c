@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "algos/misc/gost.h"
+#include "third_party/sph/sph_streebog.h"
 #include "algos/common/sph512.h"
 
 void sib_hash(const char *input, char* output, uint32_t len)

@@ -20,7 +20,7 @@
 #include <third_party/sph/sph_shabal.h>
 #include <third_party/sph/sph_whirlpool.h>
 #include <third_party/sph/sph_haval.h>
-#include "gost.h"
+#include "third_party/sph/sph_streebog.h"
 
 #include "algos/common/common.h"
 
