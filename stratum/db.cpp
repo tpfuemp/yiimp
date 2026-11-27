@@ -223,8 +223,7 @@ void db_update_coinds(YAAMP_DB *db)
 		{
 			   if (!strlen(g_stratum_coin_include) || (strlen(g_stratum_coin_include) && strstr(g_stratum_coin_include, row[20])))
 		   {
-			coind = new YAAMP_COIND;
-			memset(coind, 0, sizeof(YAAMP_COIND));
+			coind = new YAAMP_COIND();
 
 			coind->newcoind = true;
 			coind->newblock = true;
@@ -434,8 +433,7 @@ void db_update_remotes(YAAMP_DB *db)
 		YAAMP_REMOTE *remote = (YAAMP_REMOTE *)object_find(&g_list_remote, atoi(row[0]));
 		if(!remote)
 		{
-			remote = new YAAMP_REMOTE;
-			memset(remote, 0, sizeof(YAAMP_REMOTE));
+			remote = new YAAMP_REMOTE();
 
 			remote->id = atoi(row[0]);
 			newremote = true;
@@ -564,8 +562,7 @@ void db_update_renters(YAAMP_DB *db)
 		YAAMP_RENTER *renter = (YAAMP_RENTER *)object_find(&g_list_renter, atoi(row[0]));
 		if(!renter)
 		{
-			renter = new YAAMP_RENTER;
-			memset(renter, 0, sizeof(YAAMP_RENTER));
+			renter = new YAAMP_RENTER();
 
 			renter->id = atoi(row[0]);
 			g_list_renter.AddTail(renter);

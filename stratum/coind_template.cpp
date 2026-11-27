@@ -80,8 +80,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template_memorypool(YAAMP_COIND *coind)
 		return NULL;
 	}
 
-	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE;
-	memset(templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
+	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE();
 
 	templ->created = time(NULL);
 	templ->value = json_get_int(json_result, "coinbasevalue");
@@ -221,8 +220,7 @@ retry:
 		return NULL;
 	}
 
-	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE;
-	memset(templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
+	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE();
 
 	templ->created = time(NULL);
 
@@ -269,8 +267,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	// Ethereum nodes have no getblocktemplate: work comes from eth_getWork
 	if (is_eth)
 	{
-		YAAMP_JOB_TEMPLATE *work_templ = new YAAMP_JOB_TEMPLATE;
-		memset(work_templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
+		YAAMP_JOB_TEMPLATE *work_templ = new YAAMP_JOB_TEMPLATE();
 		bool built = is_nebhash ?
 			nebhash_build_template(coind, work_templ) :
 			ethash_build_template(coind, work_templ);
@@ -395,8 +392,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 
 	}
 
-	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE;
-	memset(templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
+	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE();
 
 	templ->created = time(NULL);
 	templ->value = json_get_int(json_result, "coinbasevalue");
@@ -817,8 +813,7 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 		object_delete(coind->job);
 	}
 
-	coind->job = new YAAMP_JOB;
-	memset(coind->job, 0, sizeof(YAAMP_JOB));
+	coind->job = new YAAMP_JOB();
 
 	coind->job->status = JOB_STATUS_ACTIVE;
 	coind->job->jobage = time(NULL);

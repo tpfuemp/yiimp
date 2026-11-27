@@ -133,8 +133,7 @@ int main(int argc, char **argv)
 	snprintf(g_log_directory, sizeof(g_log_directory), "/tmp/");
 	initlog("templcheck");
 
-	YAAMP_COIND *coind = new YAAMP_COIND;
-	memset(coind, 0, sizeof(YAAMP_COIND));   // as db.cpp does
+	YAAMP_COIND *coind = new YAAMP_COIND();
 	coind->id = 1;
 	coind->reward_mul = 1;
 	strcpy(coind->rpcencoding, "POW");
