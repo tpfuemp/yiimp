@@ -2,16 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
-
-#include <third_party/sph/sph_hefty1.h>
-#include <third_party/sph/sph_echo.h>
-#include <third_party/sph/sph_fugue.h>
-#include <third_party/sph/sph_whirlpool.h>
-#include <third_party/sph/sph_skein.h>
-#include <third_party/sph/sph_echo.h>
-#include <third_party/sph/sph_luffa.h>
-#include <third_party/sph/sph_hamsi.h>
-#include <third_party/sph/sph_shabal.h>
+#include "algos/common/sph512.h"
 
 #define _ALIGN(x) __attribute__ ((aligned(x)))
 
@@ -19,82 +10,46 @@ void bastion_hash(const char* input, char* output, uint32_t len)
 {
 	unsigned char _ALIGN(128) hash[64] = { 0 };
 
-	sph_echo512_context ctx_echo;
-	sph_luffa512_context ctx_luffa;
-	sph_fugue512_context ctx_fugue;
-	sph_whirlpool_context ctx_whirlpool;
-	sph_shabal512_context ctx_shabal;
-	sph_skein512_context ctx_skein;
-	sph_hamsi512_context ctx_hamsi;
-
 	HEFTY1(input, len, hash);
 
-	sph_luffa512_init(&ctx_luffa);
-	sph_luffa512(&ctx_luffa, hash, 64);
-	sph_luffa512_close(&ctx_luffa, hash);
+	sph512(SPH_LUFFA512, hash, 64, hash);
 
 	if (hash[0] & 0x8)
 	{
-		sph_fugue512_init(&ctx_fugue);
-		sph_fugue512(&ctx_fugue, hash, 64);
-		sph_fugue512_close(&ctx_fugue, hash);
+		sph512(SPH_FUGUE512, hash, 64, hash);
 	} else {
-		sph_skein512_init(&ctx_skein);
-		sph_skein512(&ctx_skein, hash, 64);
-		sph_skein512_close(&ctx_skein, hash);
+		sph512(SPH_SKEIN512, hash, 64, hash);
 	}
 
-	sph_whirlpool_init(&ctx_whirlpool);
-	sph_whirlpool(&ctx_whirlpool, hash, 64);
-	sph_whirlpool_close(&ctx_whirlpool, hash);
+	sph512(SPH_WHIRLPOOL, hash, 64, hash);
 
-	sph_fugue512_init(&ctx_fugue);
-	sph_fugue512(&ctx_fugue, hash, 64);
-	sph_fugue512_close(&ctx_fugue, hash);
+	sph512(SPH_FUGUE512, hash, 64, hash);
 
 	if (hash[0] & 0x8)
 	{
-		sph_echo512_init(&ctx_echo);
-		sph_echo512(&ctx_echo, hash, 64);
-		sph_echo512_close(&ctx_echo, hash);
+		sph512(SPH_ECHO512, hash, 64, hash);
 	} else {
-		sph_luffa512_init(&ctx_luffa);
-		sph_luffa512(&ctx_luffa, hash, 64);
-		sph_luffa512_close(&ctx_luffa, hash);
+		sph512(SPH_LUFFA512, hash, 64, hash);
 	}
 
-	sph_shabal512_init(&ctx_shabal);
-	sph_shabal512(&ctx_shabal, hash, 64);
-	sph_shabal512_close(&ctx_shabal, hash);
+	sph512(SPH_SHABAL512, hash, 64, hash);
 
-	sph_skein512_init(&ctx_skein);
-	sph_skein512(&ctx_skein, hash, 64);
-	sph_skein512_close(&ctx_skein, hash);
+	sph512(SPH_SKEIN512, hash, 64, hash);
 
 	if (hash[0] & 0x8)
 	{
-		sph_shabal512_init(&ctx_shabal);
-		sph_shabal512(&ctx_shabal, hash, 64);
-		sph_shabal512_close(&ctx_shabal, hash);
+		sph512(SPH_SHABAL512, hash, 64, hash);
 	} else {
-		sph_whirlpool_init(&ctx_whirlpool);
-		sph_whirlpool(&ctx_whirlpool, hash, 64);
-		sph_whirlpool_close(&ctx_whirlpool, hash);
+		sph512(SPH_WHIRLPOOL, hash, 64, hash);
 	}
 
-	sph_shabal512_init(&ctx_shabal);
-	sph_shabal512(&ctx_shabal, hash, 64);
-	sph_shabal512_close(&ctx_shabal, hash);
+	sph512(SPH_SHABAL512, hash, 64, hash);
 
 	if (hash[0] & 0x8)
 	{
-		sph_hamsi512_init(&ctx_hamsi);
-		sph_hamsi512(&ctx_hamsi, hash, 64);
-		sph_hamsi512_close(&ctx_hamsi, hash);
+		sph512(SPH_HAMSI512, hash, 64, hash);
 	} else {
-		sph_luffa512_init(&ctx_luffa);
-		sph_luffa512(&ctx_luffa, hash, 64);
-		sph_luffa512_close(&ctx_luffa, hash);
+		sph512(SPH_LUFFA512, hash, 64, hash);
 	}
 
 	memcpy(output, hash, 32);

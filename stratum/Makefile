@@ -78,6 +78,7 @@ endif
 
 $(SOURCES): stratum.h util.h
 stratum.o: algos/registry.def algos/algos.h
+$(SOURCES_KAWPOW) meraki/lib/meraki/progpow.cpp: progpow/core.hpp
 $(SOURCES_MERAKI): stratum.h meraki/hash.h meraki/helpers.hpp meraki/meraki.h meraki/lib/meraki/meraki.hpp meraki/lib/meraki/progpow.hpp
 $(SOURCES_HOMESCRYPT): stratum.h homescrypt/homescrypt.h
 $(SOURCES_RANDOMSCASH): stratum.h randomscash/randomscash.h randomx/src/randomx.h

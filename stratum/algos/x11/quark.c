@@ -38,6 +38,7 @@
 #include "third_party/sph/sph_jh.h"
 #include "third_party/sph/sph_keccak.h"
 #include "third_party/sph/sph_skein.h"
+#include "algos/common/sph512.h"
 
 #if 0
 static __inline uint32_t
@@ -121,17 +122,11 @@ void quark_hash(const char* input, char* output, uint32_t len)
 
     uint32_t hashA[16], hashB[16];
 
-
-
-    sph_blake512_init(&ctx_blake);
-    sph_blake512 (&ctx_blake, input, len);
-    sph_blake512_close (&ctx_blake, hashA);	 //0
-
+    sph512(SPH_BLAKE512, input, len, hashA);	 //0
 
     sph_bmw512_init(&ctx_bmw);
     sph_bmw512 (&ctx_bmw, hashA, 64);    //0
     sph_bmw512_close(&ctx_bmw, hashB);   //1
-
 
     if ((hashB[0] & mask) != zero)   //1
     {
@@ -145,7 +140,6 @@ void quark_hash(const char* input, char* output, uint32_t len)
         sph_skein512 (&ctx_skein, hashB, 64); //1
         sph_skein512_close(&ctx_skein, hashA); //2
     }
-
 
     sph_groestl512_init(&ctx_groestl);
     sph_groestl512 (&ctx_groestl, hashA, 64); //2
@@ -189,10 +183,7 @@ void quark_hash(const char* input, char* output, uint32_t len)
         sph_jh512_close(&ctx_jh, hashA); //8
     }
 
-
-
 	memcpy(output, hashA, 32);
-
 
 /*
 	printf("result: ");
@@ -202,9 +193,5 @@ void quark_hash(const char* input, char* output, uint32_t len)
 	}
 	printf ("\n");
 */
-
-
-
-
 }
 

@@ -2,24 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <third_party/sph/sph_blake.h>
-#include <third_party/sph/sph_bmw.h>
-#include <third_party/sph/sph_groestl.h>
-#include <third_party/sph/sph_jh.h>
-#include <third_party/sph/sph_keccak.h>
-#include <third_party/sph/sph_skein.h>
-#include <third_party/sph/sph_luffa.h>
-#include <third_party/sph/sph_cubehash.h>
-#include <third_party/sph/sph_shavite.h>
-#include <third_party/sph/sph_simd.h>
-#include <third_party/sph/sph_echo.h>
-#include <third_party/sph/sph_hamsi.h>
-#include <third_party/sph/sph_fugue.h>
-#include <third_party/sph/sph_shabal.h>
-#include <third_party/sph/sph_whirlpool.h>
-#include <third_party/sph/sph_sha2.h>
-
 #include "algos/common/common.h"
+#include "algos/common/sph512.h"
 
 enum Algo {
 	BLAKE = 0,
@@ -62,23 +46,6 @@ void x16r_hash(const char* input, char* output, uint32_t len)
 	uint32_t hash[64/4];
 	char hashOrder[HASH_FUNC_COUNT + 1] = { 0 };
 
-	sph_blake512_context     ctx_blake;
-	sph_bmw512_context       ctx_bmw;
-	sph_groestl512_context   ctx_groestl;
-	sph_skein512_context     ctx_skein;
-	sph_jh512_context        ctx_jh;
-	sph_keccak512_context    ctx_keccak;
-	sph_luffa512_context     ctx_luffa;
-	sph_cubehash512_context  ctx_cubehash;
-	sph_shavite512_context   ctx_shavite;
-	sph_simd512_context      ctx_simd;
-	sph_echo512_context      ctx_echo;
-	sph_hamsi512_context     ctx_hamsi;
-	sph_fugue512_context     ctx_fugue;
-	sph_shabal512_context    ctx_shabal;
-	sph_whirlpool_context    ctx_whirlpool;
-	sph_sha512_context       ctx_sha512;
-
 	void *in = (void*) input;
 	int size = len;
 
@@ -91,84 +58,52 @@ void x16r_hash(const char* input, char* output, uint32_t len)
 
 		switch (algo) {
 		case BLAKE:
-			sph_blake512_init(&ctx_blake);
-			sph_blake512(&ctx_blake, in, size);
-			sph_blake512_close(&ctx_blake, hash);
+			sph512(SPH_BLAKE512, in, size, hash);
 			break;
 		case BMW:
-			sph_bmw512_init(&ctx_bmw);
-			sph_bmw512(&ctx_bmw, in, size);
-			sph_bmw512_close(&ctx_bmw, hash);
+			sph512(SPH_BMW512, in, size, hash);
 			break;
 		case GROESTL:
-			sph_groestl512_init(&ctx_groestl);
-			sph_groestl512(&ctx_groestl, in, size);
-			sph_groestl512_close(&ctx_groestl, hash);
+			sph512(SPH_GROESTL512, in, size, hash);
 			break;
 		case SKEIN:
-			sph_skein512_init(&ctx_skein);
-			sph_skein512(&ctx_skein, in, size);
-			sph_skein512_close(&ctx_skein, hash);
+			sph512(SPH_SKEIN512, in, size, hash);
 			break;
 		case JH:
-			sph_jh512_init(&ctx_jh);
-			sph_jh512(&ctx_jh, in, size);
-			sph_jh512_close(&ctx_jh, hash);
+			sph512(SPH_JH512, in, size, hash);
 			break;
 		case KECCAK:
-			sph_keccak512_init(&ctx_keccak);
-			sph_keccak512(&ctx_keccak, in, size);
-			sph_keccak512_close(&ctx_keccak, hash);
+			sph512(SPH_KECCAK512, in, size, hash);
 			break;
 		case LUFFA:
-			sph_luffa512_init(&ctx_luffa);
-			sph_luffa512(&ctx_luffa, in, size);
-			sph_luffa512_close(&ctx_luffa, hash);
+			sph512(SPH_LUFFA512, in, size, hash);
 			break;
 		case CUBEHASH:
-			sph_cubehash512_init(&ctx_cubehash);
-			sph_cubehash512(&ctx_cubehash, in, size);
-			sph_cubehash512_close(&ctx_cubehash, hash);
+			sph512(SPH_CUBEHASH512, in, size, hash);
 			break;
 		case SHAVITE:
-			sph_shavite512_init(&ctx_shavite);
-			sph_shavite512(&ctx_shavite, in, size);
-			sph_shavite512_close(&ctx_shavite, hash);
+			sph512(SPH_SHAVITE512, in, size, hash);
 			break;
 		case SIMD:
-			sph_simd512_init(&ctx_simd);
-			sph_simd512(&ctx_simd, in, size);
-			sph_simd512_close(&ctx_simd, hash);
+			sph512(SPH_SIMD512, in, size, hash);
 			break;
 		case ECHO:
-			sph_echo512_init(&ctx_echo);
-			sph_echo512(&ctx_echo, in, size);
-			sph_echo512_close(&ctx_echo, hash);
+			sph512(SPH_ECHO512, in, size, hash);
 			break;
 		case HAMSI:
-			sph_hamsi512_init(&ctx_hamsi);
-			sph_hamsi512(&ctx_hamsi, in, size);
-			sph_hamsi512_close(&ctx_hamsi, hash);
+			sph512(SPH_HAMSI512, in, size, hash);
 			break;
 		case FUGUE:
-			sph_fugue512_init(&ctx_fugue);
-			sph_fugue512(&ctx_fugue, in, size);
-			sph_fugue512_close(&ctx_fugue, hash);
+			sph512(SPH_FUGUE512, in, size, hash);
 			break;
 		case SHABAL:
-			sph_shabal512_init(&ctx_shabal);
-			sph_shabal512(&ctx_shabal, in, size);
-			sph_shabal512_close(&ctx_shabal, hash);
+			sph512(SPH_SHABAL512, in, size, hash);
 			break;
 		case WHIRLPOOL:
-			sph_whirlpool_init(&ctx_whirlpool);
-			sph_whirlpool(&ctx_whirlpool, in, size);
-			sph_whirlpool_close(&ctx_whirlpool, hash);
+			sph512(SPH_WHIRLPOOL, in, size, hash);
 			break;
 		case SHA512:
-			sph_sha512_init(&ctx_sha512);
-			sph_sha512(&ctx_sha512,(const void*) in, size);
-			sph_sha512_close(&ctx_sha512,(void*) hash);
+			sph512(SPH_SHA512, (const void*) in, size, (void*) hash);
 			break;
 		}
 		in = (void*) hash;

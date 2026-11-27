@@ -33,9 +33,6 @@ constexpr size_t l1_cache_num_items = l1_cache_size / sizeof(uint32_t);
 
 result hash(const epoch_context& context, int block_number, const hash256& header_hash, uint64_t nonce) noexcept;
 
-bool verify(const epoch_context& context, int block_number, const hash256 *header_hash,
-    const hash256 &mix_hash, uint64_t nonce, hash256 *hash_out) noexcept;
-
 } // namespace firopow
 
 #endif // FIROPOW_PROGPOW_HPP

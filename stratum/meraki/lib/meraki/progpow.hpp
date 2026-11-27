@@ -41,24 +41,7 @@ namespace meraki_progpow
     constexpr size_t l1_cache_size = 16 * 1024;
     constexpr size_t l1_cache_num_items = l1_cache_size / sizeof(uint32_t);
 
-    result hashext(const epoch_context &context, int block_number, const hash256 &header_hash,
-                   uint64_t nonce, const hash256 &mix_hash, const hash256 &boundary1, const hash256 &boundary2, int *retcode) noexcept;
-
     extern "C" EXPORT result meraki_progpow_hash(const epoch_context &context, int block_number, const hash256 &header_hash,
                                   uint64_t nonce) noexcept;
-
-    result hash(const epoch_context_full &context, int block_number, const hash256 &header_hash,
-                uint64_t nonce) noexcept;
-
-    extern "C" EXPORT bool verify(const epoch_context &context, int block_number, const hash256 &header_hash,
-                                  const hash256 &mix_hash, uint64_t nonce, const hash256 &boundary) noexcept;
-
-    search_result search_light(const epoch_context &context, int block_number,
-                               const hash256 &header_hash, const hash256 &boundary, uint64_t start_nonce,
-                               size_t iterations) noexcept;
-
-    search_result search(const epoch_context_full &context, int block_number,
-                         const hash256 &header_hash, const hash256 &boundary, uint64_t start_nonce,
-                         size_t iterations) noexcept;
 
 } // namespace meraki_progpow

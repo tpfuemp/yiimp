@@ -4,14 +4,13 @@
 #include <stdlib.h>
 
 #include "third_party/sph/sph_cubehash.h"
-#include "third_party/sph/sph_luffa.h"
 #include "third_party/sph/sph_shavite.h"
 #include "third_party/sph/sph_simd.h"
 #include "third_party/sph/sph_echo.h"
+#include "algos/common/sph512.h"
 
 void qubit_hash(const char* input, char* output, uint32_t len)
 {
-    sph_luffa512_context    ctx_luffa;
     sph_cubehash512_context ctx_cubehash;
     sph_shavite512_context  ctx_shavite;
     sph_simd512_context     ctx_simd;
@@ -20,9 +19,7 @@ void qubit_hash(const char* input, char* output, uint32_t len)
     char hash1[64];
     char hash2[64];
 
-    sph_luffa512_init(&ctx_luffa);
-    sph_luffa512(&ctx_luffa, (const void*) input, len);
-    sph_luffa512_close(&ctx_luffa, (void*) &hash1); // 1
+    sph512(SPH_LUFFA512, (const void*) input, len, (void*) &hash1); // 1
 
     sph_cubehash512_init(&ctx_cubehash);
     sph_cubehash512(&ctx_cubehash, (const void*) &hash1, 64); // 1

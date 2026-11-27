@@ -10,60 +10,27 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
-
-#include "third_party/sph/sph_skein.h"
-#include "third_party/sph/sph_keccak.h"
-#include "third_party/sph/sph_simd.h"
-#include "third_party/sph/sph_shavite.h"
-#include "third_party/sph/sph_jh.h"
-#include "third_party/sph/sph_cubehash.h"
-#include "third_party/sph/sph_fugue.h"
-#include "third_party/sph/sph_gost.h"
+#include "algos/common/sph512.h"
 
 void renesis_hash(const char* input, char* output, uint32_t len)
 {
-	sph_skein512_context     ctx_skein;
-	sph_keccak512_context    ctx_keccak;
-	sph_simd512_context      ctx_simd;
-	sph_shavite512_context   ctx_shavite;
-	sph_jh512_context        ctx_jh;
-	sph_cubehash512_context  ctx_cubehash;
-	sph_fugue512_context	 ctx_fugue;
-	sph_gost512_context	 ctx_gost;
-	
 	uint32_t hash[64];
 	
-	sph_skein512_init(&ctx_skein);
-	sph_skein512 (&ctx_skein, input, len);
-	sph_skein512_close (&ctx_skein, hash);
+	sph512(SPH_SKEIN512, input, len, hash);
 
-	sph_keccak512_init(&ctx_keccak);
-	sph_keccak512 (&ctx_keccak, hash, 64);
-	sph_keccak512_close(&ctx_keccak, hash);
+	sph512(SPH_KECCAK512, hash, 64, hash);
 
-	sph_simd512_init (&ctx_simd);
-	sph_simd512 (&ctx_simd, hash, 64);
-	sph_simd512_close(&ctx_simd, hash);
+	sph512(SPH_SIMD512, hash, 64, hash);
 
-	sph_shavite512_init (&ctx_shavite);
-	sph_shavite512 (&ctx_shavite, hash, 64);
-	sph_shavite512_close(&ctx_shavite, hash);
+	sph512(SPH_SHAVITE512, hash, 64, hash);
 
-	sph_jh512_init(&ctx_jh);
-	sph_jh512 (&ctx_jh, hash, 64);
-	sph_jh512_close(&ctx_jh, hash);
+	sph512(SPH_JH512, hash, 64, hash);
 
-	sph_cubehash512_init(&ctx_cubehash);
-	sph_cubehash512 (&ctx_cubehash, hash, 64);
-	sph_cubehash512_close(&ctx_cubehash, hash);
+	sph512(SPH_CUBEHASH512, hash, 64, hash);
 
-	sph_fugue512_init (&ctx_fugue);
-	sph_fugue512 (&ctx_fugue, hash, 64);
-	sph_fugue512_close (&ctx_fugue, hash);
+	sph512(SPH_FUGUE512, hash, 64, hash);
 
-	sph_gost512_init (&ctx_gost);
-	sph_gost512 (&ctx_gost, hash, 64);
-	sph_gost512_close(&ctx_gost, hash);
+	sph512(SPH_GOST512, hash, 64, hash);
 
 	memcpy(output, hash, 32);
 }

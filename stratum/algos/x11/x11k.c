@@ -3,116 +3,61 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
-
-#include "third_party/sph/sph_blake.h"
-#include "third_party/sph/sph_bmw.h"
-#include "third_party/sph/sph_groestl.h"
-#include "third_party/sph/sph_jh.h"
-#include "third_party/sph/sph_keccak.h"
-#include "third_party/sph/sph_skein.h"
-#include "third_party/sph/sph_luffa.h"
-#include "third_party/sph/sph_cubehash.h"
-#include "third_party/sph/sph_shavite.h"
-#include "third_party/sph/sph_simd.h"
-#include "third_party/sph/sph_echo.h"
+#include "algos/common/sph512.h"
 
 void *Blake512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_blake512_context ctx_blake;
-
-        sph_blake512_init(&ctx_blake);
-        sph_blake512 (&ctx_blake, iHash, len);
-        sph_blake512_close (&ctx_blake, oHash);
+        sph512(SPH_BLAKE512, iHash, len, oHash);
 }
 
 void *Bmw512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_bmw512_context ctx_bmw;
-
-        sph_bmw512_init(&ctx_bmw);
-        sph_bmw512 (&ctx_bmw, iHash, len);
-        sph_bmw512_close(&ctx_bmw, oHash);
+        sph512(SPH_BMW512, iHash, len, oHash);
 }
 
 void *Groestl512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_groestl512_context ctx_groestl;
-
-        sph_groestl512_init(&ctx_groestl);
-        sph_groestl512 (&ctx_groestl, iHash, len);
-        sph_groestl512_close(&ctx_groestl, oHash);
+        sph512(SPH_GROESTL512, iHash, len, oHash);
 }
 
 void *Skein512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_skein512_context ctx_skein;
-
-        sph_skein512_init(&ctx_skein);
-        sph_skein512 (&ctx_skein, iHash, len);
-        sph_skein512_close (&ctx_skein, oHash);
+        sph512(SPH_SKEIN512, iHash, len, oHash);
 }
 
 void *Jh512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_jh512_context ctx_jh;
-
-        sph_jh512_init(&ctx_jh);
-        sph_jh512 (&ctx_jh, iHash, len);
-        sph_jh512_close(&ctx_jh, oHash);
+        sph512(SPH_JH512, iHash, len, oHash);
 }
 
 void *Keccak512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_keccak512_context ctx_keccak;
-
-        sph_keccak512_init(&ctx_keccak);
-        sph_keccak512 (&ctx_keccak, iHash, len);
-        sph_keccak512_close(&ctx_keccak, oHash);
+        sph512(SPH_KECCAK512, iHash, len, oHash);
 }
 
 void *Luffa512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_luffa512_context ctx_luffa1;
-
-        sph_luffa512_init (&ctx_luffa1);
-        sph_luffa512 (&ctx_luffa1, iHash, len);
-        sph_luffa512_close (&ctx_luffa1, oHash);
+        sph512(SPH_LUFFA512, iHash, len, oHash);
 }
 
 void *Cubehash512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_cubehash512_context ctx_cubehash1;
-
-        sph_cubehash512_init (&ctx_cubehash1);
-        sph_cubehash512 (&ctx_cubehash1, iHash, len);
-        sph_cubehash512_close(&ctx_cubehash1, oHash);
+        sph512(SPH_CUBEHASH512, iHash, len, oHash);
 }
 
 void *Shavite512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_shavite512_context ctx_shavite1;
-
-        sph_shavite512_init (&ctx_shavite1);
-        sph_shavite512 (&ctx_shavite1, iHash, len);
-        sph_shavite512_close(&ctx_shavite1, oHash);
+        sph512(SPH_SHAVITE512, iHash, len, oHash);
 }
 
 void *Simd512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_simd512_context     ctx_simd1;
-
-        sph_simd512_init (&ctx_simd1);
-        sph_simd512 (&ctx_simd1, iHash, len);
-        sph_simd512_close(&ctx_simd1, oHash);
+        sph512(SPH_SIMD512, iHash, len, oHash);
 }
 
 void *Echo512(void *oHash, const void *iHash, uint32_t len)
 {
-        sph_echo512_context     ctx_echo1;
-
-        sph_echo512_init (&ctx_echo1);
-        sph_echo512 (&ctx_echo1, iHash, len);
-        sph_echo512_close(&ctx_echo1, oHash);
+        sph512(SPH_ECHO512, iHash, len, oHash);
 }
 
 void *fnHashX11K[] = {

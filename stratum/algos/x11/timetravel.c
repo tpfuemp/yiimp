@@ -1,23 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "algos/common/sph512.h"
 
 #define HASH_FUNC_BASE_TIMESTAMP 1389040865 // Machinecoin: Genesis Timestamp
 #define HASH_FUNC_COUNT 8                   // Machinecoin: HASH_FUNC_COUNT of 11
 #define HASH_FUNC_COUNT_PERMUTATIONS 40320  // Machinecoin: HASH_FUNC_COUNT!
 
-#include <third_party/sph/sph_blake.h>
-#include <third_party/sph/sph_bmw.h>
-#include <third_party/sph/sph_groestl.h>
-#include <third_party/sph/sph_jh.h>
-#include <third_party/sph/sph_keccak.h>
-#include <third_party/sph/sph_skein.h>
-#include <third_party/sph/sph_luffa.h>
-#include <third_party/sph/sph_cubehash.h>
 #if HASH_FUNC_COUNT > 8
-#include <third_party/sph/sph_shavite.h>
-#include <third_party/sph/sph_simd.h>
-#include <third_party/sph/sph_echo.h>
 #endif
 
 #define _ALIGN(x) __attribute__ ((aligned(x)))
@@ -77,19 +67,7 @@ void timetravel_hash(const char* input, char* output, uint32_t len)
 	uint32_t *work_data = (uint32_t *)input;
 	const uint32_t timestamp = work_data[17];
 
-
-	sph_blake512_context     ctx_blake;
-	sph_bmw512_context       ctx_bmw;
-	sph_groestl512_context   ctx_groestl;
-	sph_skein512_context     ctx_skein;
-	sph_jh512_context        ctx_jh;
-	sph_keccak512_context    ctx_keccak;
-	sph_luffa512_context     ctx_luffa;
-	sph_cubehash512_context  ctx_cubehash;
 #if HASH_FUNC_COUNT > 8
-	sph_shavite512_context   ctx_shavite;
-	sph_simd512_context      ctx_simd;
-	sph_echo512_context      ctx_echo;
 #endif
 	// We want to permute algorithms. To get started we
 	// initialize an array with a sorted sequence of unique
@@ -117,60 +95,38 @@ void timetravel_hash(const char* input, char* output, uint32_t len)
 
 		switch(permutation[i]) {
 			case 0:
-				sph_blake512_init(&ctx_blake);
-				sph_blake512(&ctx_blake, hashA, dataLen);
-				sph_blake512_close(&ctx_blake, hashB);
+				sph512(SPH_BLAKE512, hashA, dataLen, hashB);
 				break;
 			case 1:
-				sph_bmw512_init(&ctx_bmw);
-				sph_bmw512 (&ctx_bmw, hashA, dataLen);
-				sph_bmw512_close(&ctx_bmw, hashB);
+				sph512(SPH_BMW512, hashA, dataLen, hashB);
 				break;
 			case 2:
-				sph_groestl512_init(&ctx_groestl);
-				sph_groestl512 (&ctx_groestl, hashA, dataLen);
-				sph_groestl512_close(&ctx_groestl, hashB);
+				sph512(SPH_GROESTL512, hashA, dataLen, hashB);
 				break;
 			case 3:
-				sph_skein512_init(&ctx_skein);
-				sph_skein512 (&ctx_skein, hashA, dataLen);
-				sph_skein512_close(&ctx_skein, hashB);
+				sph512(SPH_SKEIN512, hashA, dataLen, hashB);
 				break;
 			case 4:
-				sph_jh512_init(&ctx_jh);
-				sph_jh512 (&ctx_jh, hashA, dataLen);
-				sph_jh512_close(&ctx_jh, hashB);
+				sph512(SPH_JH512, hashA, dataLen, hashB);
 				break;
 			case 5:
-				sph_keccak512_init(&ctx_keccak);
-				sph_keccak512 (&ctx_keccak, hashA, dataLen);
-				sph_keccak512_close(&ctx_keccak, hashB);
+				sph512(SPH_KECCAK512, hashA, dataLen, hashB);
 				break;
 			case 6:
-				sph_luffa512_init(&ctx_luffa);
-				sph_luffa512 (&ctx_luffa, hashA, dataLen);
-				sph_luffa512_close(&ctx_luffa, hashB);
+				sph512(SPH_LUFFA512, hashA, dataLen, hashB);
 				break;
 			case 7:
-				sph_cubehash512_init(&ctx_cubehash);
-				sph_cubehash512 (&ctx_cubehash, hashA, dataLen);
-				sph_cubehash512_close(&ctx_cubehash, hashB);
+				sph512(SPH_CUBEHASH512, hashA, dataLen, hashB);
 				break;
 #if HASH_FUNC_COUNT > 8
 			case 8:
-				sph_shavite512_init(&ctx_shavite);
-				sph_shavite512(&ctx_shavite, hashA, dataLen);
-				sph_shavite512_close(&ctx_shavite, hashB);
+				sph512(SPH_SHAVITE512, hashA, dataLen, hashB);
 				break;
 			case 9:
-				sph_simd512_init(&ctx_simd);
-				sph_simd512 (&ctx_simd, hashA, dataLen);
-				sph_simd512_close(&ctx_simd, hashB);
+				sph512(SPH_SIMD512, hashA, dataLen, hashB);
 				break;
 			case 10:
-				sph_echo512_init(&ctx_echo);
-				sph_echo512 (&ctx_echo, hashA, dataLen);
-				sph_echo512_close(&ctx_echo, hashB);
+				sph512(SPH_ECHO512, hashA, dataLen, hashB);
 				break;
 #endif
 			default:

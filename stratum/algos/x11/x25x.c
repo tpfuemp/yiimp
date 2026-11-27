@@ -2,21 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <third_party/sph/sph_blake.h>
-#include <third_party/sph/sph_bmw.h>
-#include <third_party/sph/sph_groestl.h>
-#include <third_party/sph/sph_jh.h>
-#include <third_party/sph/sph_keccak.h>
-#include <third_party/sph/sph_skein.h>
-#include <third_party/sph/sph_luffa.h>
-#include <third_party/sph/sph_cubehash.h>
-#include <third_party/sph/sph_shavite.h>
-#include <third_party/sph/sph_simd.h>
-#include <third_party/sph/sph_echo.h>
-#include <third_party/sph/sph_hamsi.h>
-#include <third_party/sph/sph_fugue.h>
-#include <third_party/sph/sph_shabal.h>
-#include <third_party/sph/sph_whirlpool.h>
 #include <third_party/sph/sph_sha2.h>
 #include <third_party/sph/sph_haval.h>
 #include <third_party/sph/sph_tiger.h>
@@ -32,97 +17,49 @@
 #include "algos/lyra2/Lyra2.h"
 
 #include "algos/common/common.h"
+#include "algos/common/sph512.h"
 
 void x25x_hash(const char* input, char* output, uint32_t len)
 {
-        sph_blake512_context      ctx_blake;
-        sph_bmw512_context        ctx_bmw;
-        sph_groestl512_context    ctx_groestl;
-        sph_jh512_context         ctx_jh;
-        sph_keccak512_context     ctx_keccak;
-        sph_skein512_context      ctx_skein;
-        sph_luffa512_context      ctx_luffa;
-        sph_cubehash512_context   ctx_cubehash;
-        sph_shavite512_context    ctx_shavite;
-        sph_simd512_context       ctx_simd;
-        sph_echo512_context       ctx_echo;
-        sph_hamsi512_context      ctx_hamsi;
-        sph_fugue512_context      ctx_fugue;
-        sph_shabal512_context     ctx_shabal;
-        sph_whirlpool_context     ctx_whirlpool;
-        sph_sha512_context        ctx_sha512;
         sph_haval256_5_context    ctx_haval;
         sph_tiger_context         ctx_tiger;
-        sph_gost512_context       ctx_gost;
         sph_sha256_context        ctx_sha;
         sph_panama_context        ctx_panama;
 
 //	unsigned char _ALIGN(128) hash[25][64] = { [0 ... 24] = { [0 ... 63] = 0 } };
 	unsigned char _ALIGN(128) hash[25][64] = { 0 };
 
-	sph_blake512_init(&ctx_blake);
-	sph_blake512(&ctx_blake, input, len);
-	sph_blake512_close (&ctx_blake, &hash[0]);
+	sph512(SPH_BLAKE512, input, len, &hash[0]);
 
-	sph_bmw512_init(&ctx_bmw);
-	sph_bmw512(&ctx_bmw, &hash[0], 64);
-	sph_bmw512_close(&ctx_bmw, &hash[1]);
+	sph512(SPH_BMW512, &hash[0], 64, &hash[1]);
 
-	sph_groestl512_init(&ctx_groestl);
-	sph_groestl512(&ctx_groestl, &hash[1], 64);
-	sph_groestl512_close(&ctx_groestl, &hash[2]);
+	sph512(SPH_GROESTL512, &hash[1], 64, &hash[2]);
 
-	sph_skein512_init(&ctx_skein);
-	sph_skein512(&ctx_skein, &hash[2], 64);
-	sph_skein512_close(&ctx_skein, &hash[3]);
+	sph512(SPH_SKEIN512, &hash[2], 64, &hash[3]);
 
-	sph_jh512_init(&ctx_jh);
-	sph_jh512(&ctx_jh, &hash[3], 64);
-	sph_jh512_close(&ctx_jh, &hash[4]);
+	sph512(SPH_JH512, &hash[3], 64, &hash[4]);
 
-	sph_keccak512_init(&ctx_keccak);
-	sph_keccak512(&ctx_keccak, &hash[4], 64);
-	sph_keccak512_close(&ctx_keccak, &hash[5]);
+	sph512(SPH_KECCAK512, &hash[4], 64, &hash[5]);
 
-	sph_luffa512_init(&ctx_luffa);
-	sph_luffa512(&ctx_luffa, &hash[5], 64);
-	sph_luffa512_close (&ctx_luffa, &hash[6]);
+	sph512(SPH_LUFFA512, &hash[5], 64, &hash[6]);
 
-	sph_cubehash512_init(&ctx_cubehash);
-	sph_cubehash512(&ctx_cubehash, &hash[6], 64);
-	sph_cubehash512_close(&ctx_cubehash, &hash[7]);
+	sph512(SPH_CUBEHASH512, &hash[6], 64, &hash[7]);
 
-	sph_shavite512_init(&ctx_shavite);
-	sph_shavite512(&ctx_shavite, &hash[7], 64);
-	sph_shavite512_close(&ctx_shavite, &hash[8]);
+	sph512(SPH_SHAVITE512, &hash[7], 64, &hash[8]);
 
-	sph_simd512_init(&ctx_simd);
-	sph_simd512(&ctx_simd, &hash[8], 64);
-	sph_simd512_close(&ctx_simd, &hash[9]);
+	sph512(SPH_SIMD512, &hash[8], 64, &hash[9]);
 
-	sph_echo512_init(&ctx_echo);
-	sph_echo512(&ctx_echo, &hash[9], 64);
-	sph_echo512_close(&ctx_echo, &hash[10]);
+	sph512(SPH_ECHO512, &hash[9], 64, &hash[10]);
 
-	sph_hamsi512_init(&ctx_hamsi);
-	sph_hamsi512(&ctx_hamsi, &hash[10], 64);
-	sph_hamsi512_close(&ctx_hamsi, &hash[11]);
+	sph512(SPH_HAMSI512, &hash[10], 64, &hash[11]);
 
-	sph_fugue512_init(&ctx_fugue);
-	sph_fugue512(&ctx_fugue, &hash[11], 64);
-	sph_fugue512_close(&ctx_fugue, &hash[12]);
+	sph512(SPH_FUGUE512, &hash[11], 64, &hash[12]);
 
-	sph_shabal512_init(&ctx_shabal);
-	sph_shabal512(&ctx_shabal, (const void*) &hash[12], 64);
-	sph_shabal512_close(&ctx_shabal, &hash[13]);
+	sph512(SPH_SHABAL512, (const void*) &hash[12], 64, &hash[13]);
 
-	sph_whirlpool_init(&ctx_whirlpool);
-	sph_whirlpool (&ctx_whirlpool, (const void*) &hash[13], 64);
-	sph_whirlpool_close(&ctx_whirlpool, &hash[14]);
+	sph512(SPH_WHIRLPOOL, (const void*) &hash[13], 64, &hash[14]);
 
-	sph_sha512_init(&ctx_sha512);
-	sph_sha512(&ctx_sha512,(const void*) &hash[14], 64);
-	sph_sha512_close(&ctx_sha512,(void*) &hash[15]);
+	sph512(SPH_SHA512, (const void*) &hash[14], 64, (void*) &hash[15]);
 
 	unsigned char temp[SWIFFTX_OUTPUT_BLOCK_SIZE] = {0};
 	InitializeSWIFFTX();
@@ -139,9 +76,7 @@ void x25x_hash(const char* input, char* output, uint32_t len)
 
 	LYRA2((void*) &hash[19], 32, (const void*) &hash[18], 32, (const void*) &hash[18], 32, 1, 4, 4);
 
-	sph_gost512_init(&ctx_gost);
-	sph_gost512 (&ctx_gost, (const void*) &hash[19], 64);
-	sph_gost512_close(&ctx_gost, (void*) &hash[20]);
+	sph512(SPH_GOST512, (const void*) &hash[19], 64, (void*) &hash[20]);
 
 	sph_sha256_init(&ctx_sha);
 	sph_sha256 (&ctx_sha, (const void*) &hash[20], 64);
