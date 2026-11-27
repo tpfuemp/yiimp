@@ -156,7 +156,12 @@ static int decred_parse_header(YAAMP_JOB_TEMPLATE *templ, const char *header_hex
 
 	//debuglog("HEADER: %s\n", header_hex);
 
-	binlify((unsigned char*) &header, header_hex);
+	// getwork data: 180-byte header plus 12 bytes BLAKE-256 padding (hashtag).
+	// Decode at most sizeof(header), binlify() writes as much as the string holds.
+	char hex[sizeof(header) * 2 + 1];
+	snprintf(hex, sizeof(hex), "%s", header_hex);
+	memset(&header, 0, sizeof(header));
+	binlify((unsigned char*) &header, hex);
 
 	templ->height = header.height;
 	// reversed to tell its not a normal stratum coinbase
@@ -177,7 +182,7 @@ static int decred_parse_header(YAAMP_JOB_TEMPLATE *templ, const char *header_hex
 }
 
 // decred getwork over stratum
-static YAAMP_JOB_TEMPLATE *decred_create_worktemplate(YAAMP_COIND *coind)
+YAAMP_JOB_TEMPLATE *decred_create_worktemplate(YAAMP_COIND *coind)
 {
 	char rpc_error[1024] = { 0 };
 	#define GETWORK_RETRY_MAX 3
