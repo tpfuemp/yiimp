@@ -5,6 +5,7 @@
 //   hashcheck --check FILE [--algo NAME] compare with FILE, exit 1 on mismatch
 //   hashcheck --reference FILE           check known answers (took over from the
 //                                        removed in-binary validate_hashfunctions())
+//   --verthash-data FILE                 map verthash.dat first (reference only)
 //
 // The vector file is a golden master of today's behaviour (any change is a
 // regression or needs a conscious re-generate). The reference file holds known
@@ -262,14 +263,16 @@ int main(int argc, char **argv)
 	const char *check_file = NULL;
 	const char *ref_file = NULL;
 	const char *only = NULL;
+	const char *vh_data = NULL;
 	bool generate = false;
-	const char *usage = "usage: %s --generate | --check FILE [--algo NAME] | --reference FILE\n";
+	const char *usage = "usage: %s --generate | --check FILE [--algo NAME] | --reference FILE [--verthash-data FILE]\n";
 
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--generate")) generate = true;
 		else if (!strcmp(argv[i], "--check") && i + 1 < argc) check_file = argv[++i];
 		else if (!strcmp(argv[i], "--reference") && i + 1 < argc) ref_file = argv[++i];
 		else if (!strcmp(argv[i], "--algo") && i + 1 < argc) only = argv[++i];
+		else if (!strcmp(argv[i], "--verthash-data") && i + 1 < argc) vh_data = argv[++i];
 		else { fprintf(stderr, usage, argv[0]); return 2; }
 	}
 	if ((int)generate + (check_file != NULL) + (ref_file != NULL) != 1) {
@@ -280,6 +283,15 @@ int main(int argc, char **argv)
 	// hash functions log through debuglog(); keep that out of the way
 	snprintf(g_log_directory, sizeof(g_log_directory), "/tmp/");
 	initlog(NULL);
+
+	if (vh_data && !ref_file) { fprintf(stderr, usage, argv[0]); return 2; }
+	if (vh_data) {
+		char err[1200];
+		if (verthash_data_open(vh_data, err, sizeof(err))) {
+			fprintf(stderr, "verthash: %s\n", err);
+			return 2;
+		}
+	}
 
 	if (ref_file) return check_references(ref_file);
 

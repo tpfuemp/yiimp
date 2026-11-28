@@ -107,6 +107,7 @@
 #include "algos/sha2/sha512_256.h"
 #include "algos/misc/sha3d.h"
 #include "algos/misc/sha3t.h"
+#include "algos/verthash/verthash.h"
 #include "algos/sha2/sha256dt.h"
 #include "algos/misc/skydoge.h"
 #include "algos/equihash/equihash.h"

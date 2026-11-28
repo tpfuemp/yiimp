@@ -61,6 +61,8 @@ char g_nebhash_dataset[1024] = "neb-datasets.bin";	// [NEBHASH] dataset, the nod
 char g_nebhash_chain_id[65] = "da2f5af7bb4c5e2bcc8d558b2f4f01d4c88557a943e6cff9cd035638fe9439ae";
 uint32_t g_nebhash_start_k = 10;
 
+static char g_verthash_data[1024] = "verthash.dat";	// [VERTHASH] data_file
+
 double g_stratum_nicehash_difficulty;
 double g_stratum_nicehash_min_diff;
 double g_stratum_nicehash_max_diff;
@@ -335,6 +337,9 @@ int main(int argc, char **argv)
 		if (g_nebhash_start_k > 48) g_nebhash_start_k = 48;
 	}
 
+	if (!strcmp(g_stratum_algo, "verthash") && !ini_string(ini, "VERTHASH:data_file", g_verthash_data))
+		return 1;
+
 	g_stratum_nicehash_difficulty = iniparser_getdouble(ini, "STRATUM:nicehash", 16);
 	g_stratum_nicehash_min_diff = iniparser_getdouble(ini, "STRATUM:nicehash_diff_min", g_stratum_nicehash_difficulty/2);
 	g_stratum_nicehash_max_diff = iniparser_getdouble(ini, "STRATUM:nicehash_diff_max", g_stratum_nicehash_difficulty*8192);
@@ -375,6 +380,15 @@ int main(int argc, char **argv)
 	if(!g_current_algo->hash_function) yaamp_error("no hash function");
 
 	stratum_set_algo_flags(g_current_algo);
+
+	if (!strcmp(g_current_algo->name, "verthash")) {
+		char err[1200];
+		if (verthash_data_open(g_verthash_data, err, sizeof(err))) {
+			stratumlogdate("verthash: %s\n", err);
+			yaamp_error("verthash data file");
+		}
+		stratumlogdate("verthash: data file %s mapped and verified\n", g_verthash_data);
+	}
 
 //	struct rlimit rlim_files = {0x10000, 0x10000};
 //	setrlimit(RLIMIT_NOFILE, &rlim_files);

@@ -4,6 +4,8 @@
 # so new algo sources are picked up without editing this file.
 #
 #   make -C tests check        hash vectors + reference KATs + XHash vectors + templates (plain build)
+#   VERTHASH_DATA=<verthash.dat> make -C tests check-verthash
+#                              Vertcoin block KATs (skipped without the data file)
 #   make -C tests vectors      re-generate the golden masters (review the diff!)
 #   make -C tests hardened     same tools + stratum, -O2 -D_FORTIFY_SOURCE=3
 #                              -fstack-protector-strong; then runs overflow cases
@@ -93,7 +95,7 @@ GETHCHECK  := $(OUT)/gethcheck
 STRATUM    := $(OUT)/stratum
 
 .PHONY: all tools libs check vectors hardened asan warnings clean \
-        check-hash check-ref check-templ check-progpow check-xhash check-geth overflow
+        check-hash check-ref check-templ check-progpow check-xhash check-geth check-verthash overflow
 .DEFAULT_GOAL := check
 
 all tools: $(HASHCHECK) $(TEMPLCHECK) $(PPCHECK) $(XHASHCHECK) $(GETHCHECK)
@@ -142,7 +144,7 @@ $(STRATUM): $(OBJ_MAIN) $(OBJ_CORE) | libs
 FIXTURES := $(sort $(dir $(wildcard fixtures/*/coind.conf)))
 OVERFLOW := $(sort $(dir $(wildcard overflow/*/coind.conf)))
 
-check: check-ref check-hash check-templ check-progpow check-xhash check-geth overflow
+check: check-ref check-hash check-templ check-progpow check-xhash check-geth check-verthash overflow
 
 check-ref: $(HASHCHECK)
 	$(HASHCHECK) --reference vectors/reference.txt
@@ -170,6 +172,10 @@ check-xhash: $(XHASHCHECK)
 
 check-geth: $(GETHCHECK)
 	$(GETHCHECK)
+
+check-verthash: $(HASHCHECK)
+	@if [ -z "$(VERTHASH_DATA)" ]; then echo "verthash: skipped, VERTHASH_DATA not set"; \
+	else $(HASHCHECK) --reference vectors/verthash.txt --verthash-data "$(VERTHASH_DATA)"; fi
 
 # golden masters from the current code; review `git diff` before committing
 vectors: $(HASHCHECK) $(TEMPLCHECK) $(PPCHECK)
