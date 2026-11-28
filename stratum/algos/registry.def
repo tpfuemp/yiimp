@@ -111,6 +111,7 @@ ALGO("sha256dt", sha256dt_hash, 1, 0, STD, 0)
 ALGO("sha256csm", sha256csm_hash, 1, 0, STD, 0)
 ALGO("sha256t", sha256t_hash, 1, 0, STD, 0) // sha256 3x
 ALGO("sha3d", sha3d_hash, 1, sha3d_hash_hex, STD, 0)
+ALGO("sha3t", sha3t_hash, 1, 0, STD, 0)
 ALGO("sha512256d", sha512_256_double_hash, 1, 0, STD, 0)
 ALGO("sib", sib_hash, 1, 0, STD, 0)
 ALGO("skydoge", skydoge_hash, 1, 0, STD, 0) /* Skydoge */
