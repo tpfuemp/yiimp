@@ -23,3 +23,17 @@ void whirlpoolx_hash(const char* input, char* output, uint32_t len)
 
 	memcpy(output, hash_xored, 32);
 }
+
+// CapStash: one Whirlpool-512, folded to 256 bits from the two clean halves
+void whirlpoolx2_hash(const char* input, char* output, uint32_t len)
+{
+	unsigned char hash[64];
+	sph_whirlpool_context ctx_whirlpool;
+
+	sph_whirlpool_init(&ctx_whirlpool);
+	sph_whirlpool(&ctx_whirlpool, input, len);
+	sph_whirlpool_close(&ctx_whirlpool, hash);
+
+	for (int i = 0; i < 32; i++)
+		output[i] = hash[i] ^ hash[i + 32];
+}

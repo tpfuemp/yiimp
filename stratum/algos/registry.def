@@ -169,4 +169,5 @@ ALGO("yespowerADVC", yespowerADVC_hash, 0x10000, 0, STD, 0)
 ALGO("whirlcoin", whirlpool_hash, 1, sha256_hash_hex, STD, 0) /* old sha merkleroot */
 ALGO("whirlpool", whirlpool_hash, 1, 0, STD, 0) /* sha256d merkleroot */
 ALGO("whirlpoolx", whirlpoolx_hash, 1, 0, STD, 0)
+ALGO("whirlpoolx2", whirlpoolx2_hash, 1, 0, STD, 0)
 ALGO("zr5", zr5_hash, 1, 0, STD, 0)
