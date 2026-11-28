@@ -108,6 +108,7 @@
 #include "algos/misc/sha3d.h"
 #include "algos/misc/sha3t.h"
 #include "algos/verthash/verthash.h"
+#include "algos/bc3hash/bc3hash.h"
 #include "algos/sha2/sha256dt.h"
 #include "algos/misc/skydoge.h"
 #include "algos/equihash/equihash.h"

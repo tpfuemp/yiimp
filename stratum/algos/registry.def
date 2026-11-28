@@ -19,6 +19,7 @@ ALGO("argon2d16000", argon2d16000_hash, 0x10000, 0, STD, 0) // Argon2d16000 Impl
 ALGO("astralhash", astralhash_hash, 0x100, 0, STD, 0)
 ALGO("balloon", balloon_hash, 1, 0, STD, 0)
 ALGO("bastion", bastion_hash, 1, 0, STD, 0)
+ALGO("bc3hash", bc3hash_hash, 1, 0, STD, 0) // Bitcoin III from block 64360
 ALGO("bcd", bcd_hash, 1, 0, STD, 0)
 ALGO("bitcore", timetravel10_hash, 0x100, 0, STD, ALGO_NO_ROLLTIME)
 ALGO("blake", blake_hash, 1, 0, STD, 0)

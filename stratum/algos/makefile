@@ -6,7 +6,7 @@ include ../arch.mk
 #CFLAGS=-c -g -I /usr/include/mysql
 #LDFLAGS=-g
 
-CXXFLAGS = -O2 -I.. -march=$(ARCH) -DNO_AES_NI -DBLAKE3_NO_SSE2 -DBLAKE3_NO_SSE41 -DXKCP_has_KeccakP1600
+CXXFLAGS = -O2 -I.. -I../third_party/secp256k1/include -Ibc3hash/ref/include -march=$(ARCH) -DNO_AES_NI -DBLAKE3_NO_SSE2 -DBLAKE3_NO_SSE41 -DXKCP_has_KeccakP1600
 CFLAGS= $(CXXFLAGS) -std=gnu99 -fno-strict-aliasing -fwrapv
 LDFLAGS=-O2 -lgmp
 
@@ -32,7 +32,7 @@ SOURCES=lyra2/lyra2re.c lyra2/lyra2v2.c lyra2/Lyra2.c lyra2/lyra2z.c lyra2/lyra2
 	cryptonight/cryptonight_lite.c cryptonight/cryptonight_soft_shell.c cryptonight/cryptonight_turtle.c \
 	cryptonight/cryptonight_turtle_lite.c misc/anime.c misc/soterg.c \
 	equihash/equihash.cpp \
-	heavyhash/heavyhash.c heavyhash/keccak_tiny.c misc/cosa.c misc/0x10.c misc/mike.c sha2/sha512_256.c misc/sha3d.c misc/sha3t.c sha2/sha256dt.c verthash/verthash.c misc/skydoge.c misc/flex.c \
+	heavyhash/heavyhash.c heavyhash/keccak_tiny.c misc/cosa.c misc/0x10.c misc/mike.c sha2/sha512_256.c misc/sha3d.c misc/sha3t.c sha2/sha256dt.c verthash/verthash.c bc3hash/bc3hash.cpp misc/skydoge.c misc/flex.c \
 	misc/xelisv2.c ../third_party/blake3/blake3.c ../third_party/blake3/blake3_dispatch.c ../third_party/blake3/blake3_portable.c xelisv2-pepew/chacha20.c xelisv2-pepew/chacha20_dispatch.c \
 	misc/rinhash.c ../third_party/keccak-xkcp/KeccakP-1600-reference.c ../third_party/keccak-xkcp/KeccakSponge.c ../third_party/keccak-xkcp/SimpleFIPS202.c
 	

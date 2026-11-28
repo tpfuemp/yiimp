@@ -390,6 +390,9 @@ int main(int argc, char **argv)
 		stratumlogdate("verthash: data file %s mapped and verified\n", g_verthash_data);
 	}
 
+	if (!strcmp(g_current_algo->name, "bc3hash") && bc3hash_init())
+		yaamp_error("bc3hash tables");
+
 //	struct rlimit rlim_files = {0x10000, 0x10000};
 //	setrlimit(RLIMIT_NOFILE, &rlim_files);
 
