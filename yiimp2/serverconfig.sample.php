@@ -53,6 +53,16 @@ defined('YIIMP_FEES_EXCHANGE') or define('YIIMP_FEES_EXCHANGE', 2);            /
 defined('YIIMP_PAYMENTS_FREQ') or define('YIIMP_PAYMENTS_FREQ', 3 * 60 * 60); // seconds between payout cycles
 defined('YIIMP_PAYMENTS_MINI') or define('YIIMP_PAYMENTS_MINI', 0.001);        // minimum payout amount (BTC)
 
+// GETH-family payouts are signed locally from an Ethereum V3 keystore.
+// gethethsig never prints the private key and only emits a raw transaction.
+// Keystore and password: outside the web root, readable by the payout user only.
+defined('YIIMP_GETH_SIGNER_BIN')    or define('YIIMP_GETH_SIGNER_BIN',    '/var/www/bin/gethethsig');
+defined('YIIMP_GETH_KEYSTORE_DIR')  or define('YIIMP_GETH_KEYSTORE_DIR',  '/etc/yiimp/geth/keystore');
+defined('YIIMP_GETH_PASSWORD_FILE') or define('YIIMP_GETH_PASSWORD_FILE', '/etc/yiimp/geth/password.txt');
+defined('YIIMP_GETH_GAS_LIMIT')     or define('YIIMP_GETH_GAS_LIMIT',     21000); // plain native transfer
+// defined('YIIMP_GETH_KEYSTORE_FILE') or define('YIIMP_GETH_KEYSTORE_FILE', '/path/to/UTC--...');
+// defined('YIIMP_GETH_GAS_PRICE')     or define('YIIMP_GETH_GAS_PRICE',     1000000000);
+
 // ── Features ──────────────────────────────────────────────────────────────────
 defined('YIIMP_ALLOW_EXCHANGE')  or define('YIIMP_ALLOW_EXCHANGE',  false);    // enable multi-coin auto-exchange
 defined('YIIMP_RENTAL')          or define('YIIMP_RENTAL',          false);    // pool rents OUT hash power to external renters

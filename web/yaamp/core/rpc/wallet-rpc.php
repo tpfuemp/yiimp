@@ -37,6 +37,7 @@ class WalletRPC {
 			$coin = $userOrCoin;
 			switch ($coin->rpcencoding) {
 			case 'GETH':
+			case 'NIRO':
 				$this->type = 'Ethereum';
 				$this->coin = $coin;
 				$this->account = empty($coin->account) ? $coin->master_wallet : $coin->account;
@@ -70,6 +71,168 @@ class WalletRPC {
 			$user = $userOrCoin;
 			$this->rpc = new Bitcoin($user, $pw, $host, $port, $url);
 		}
+	}
+
+	/**
+	 * GETH mining nodes expose no unlocked wallet account. Payouts are signed
+	 * locally from an Ethereum V3 keystore with gethethsig and broadcast via
+	 * eth_sendRawTransaction. All paths are guarded so a missing signer can
+	 * never debit a user balance before the broadcast is confirmed.
+	 */
+	protected function gethSignerConfig()
+	{
+		$bin = defined('YIIMP_GETH_SIGNER_BIN') ? constant('YIIMP_GETH_SIGNER_BIN')
+			: realpath(dirname(__FILE__).'/../../../../bin/gethethsig');
+		if (!$bin) $bin = dirname(__FILE__).'/../../../../bin/gethethsig';
+		if (!defined('YIIMP_GETH_PASSWORD_FILE')) {
+			$this->error = 'YIIMP_GETH_PASSWORD_FILE is not configured';
+			return null;
+		}
+		$password = constant('YIIMP_GETH_PASSWORD_FILE');
+
+		$keystores = array();
+		if (defined('YIIMP_GETH_KEYSTORE_FILE')) {
+			$keystores[] = constant('YIIMP_GETH_KEYSTORE_FILE');
+		} else {
+			if (defined('YIIMP_GETH_KEYSTORE_DIR')) {
+				$found = glob(rtrim(constant('YIIMP_GETH_KEYSTORE_DIR'), '/').'/UTC*');
+				if (is_array($found)) $keystores = $found;
+			}
+		}
+
+		if (!is_executable($bin)) {
+			$this->error = "GETH signer is not executable: $bin";
+			return null;
+		}
+		if (!is_readable($password)) {
+			$this->error = "GETH keystore password is not readable: $password";
+			return null;
+		}
+		if (empty($keystores)) {
+			$this->error = 'No GETH keystore file configured';
+			return null;
+		}
+
+		$usable = array();
+		foreach ($keystores as $file) {
+			if (is_readable($file)) $usable[] = $file;
+		}
+		if (empty($usable)) {
+			$this->error = 'No readable GETH keystore file';
+			return null;
+		}
+
+		return array('bin' => $bin, 'password' => $password, 'keystores' => $usable);
+	}
+
+	/** Convert an 8-decimal coin balance to an exact wei decimal string. */
+	protected function gethAmountToWei($amount)
+	{
+		$amount = (float) $amount;
+		if ($amount <= 0) return '0';
+		$string = sprintf('%.8f', $amount);
+		$parts = explode('.', $string, 2);
+		$fraction = isset($parts[1]) ? substr($parts[1], 0, 8) : '';
+		$wei = ltrim($parts[0].str_pad($fraction, 8, '0').str_repeat('0', 10), '0');
+		return $wei === '' ? '0' : $wei;
+	}
+
+	/** Sign one legacy EIP-155 transfer and broadcast it. */
+	protected function gethSendToAddress($address, $amount)
+	{
+		$this->error = null;
+		// accounts may use the 0X prefix, the signer and node want 0x
+		$address = preg_replace('/^0X/', '0x', (string) $address);
+		if (!preg_match('/^0x[0-9a-fA-F]{40}$/', $address)) {
+			$this->error = "invalid GETH address: $address";
+			return false;
+		}
+
+		$from = preg_replace('/^0X/', '0x', (string) $this->account);
+		if (!preg_match('/^0x[0-9a-fA-F]{40}$/', $from)) {
+			$this->error = 'GETH master_wallet is not a valid address';
+			return false;
+		}
+
+		$config = $this->gethSignerConfig();
+		if (!$config) return false;
+
+		$chain = $this->rpc->eth_chainId();
+		if (!is_numeric($chain) || (int) $chain <= 0) {
+			$this->error = $this->rpc->error ?: 'eth_chainId failed';
+			return false;
+		}
+		$gasPrice = $this->rpc->eth_gasPrice();
+		if (defined('YIIMP_GETH_GAS_PRICE')) $gasPrice = (int) constant('YIIMP_GETH_GAS_PRICE');
+		if (!is_numeric($gasPrice) || (int) $gasPrice <= 0) {
+			$this->error = $this->rpc->error ?: 'eth_gasPrice failed';
+			return false;
+		}
+		$gasLimit = defined('YIIMP_GETH_GAS_LIMIT') ? (int) constant('YIIMP_GETH_GAS_LIMIT') : 21000;
+		if ($gasLimit < 21000) $gasLimit = 21000;
+
+		$valueWei = $this->gethAmountToWei($amount);
+		$gasWei = (float) $gasPrice * $gasLimit;
+		if ($valueWei === '0' || (float) $valueWei <= $gasWei) {
+			$this->error = 'GETH payout is below the estimated gas cost';
+			return false;
+		}
+
+		// pending: several payouts per cycle, each needs the next nonce
+		$nonce = $this->rpc->eth_getTransactionCount($from, 'pending');
+		if (!is_numeric($nonce)) {
+			$this->error = $this->rpc->error ?: 'eth_getTransactionCount failed';
+			return false;
+		}
+
+		$cmdBase = array(
+			$config['bin'],
+			'--password-file', $config['password'],
+			'--expected-address', $from,
+			'--to', $address,
+			'--value-wei', $valueWei,
+			'--nonce', (string) (int) $nonce,
+			'--gas-price', (string) (int) $gasPrice,
+			'--gas-limit', (string) $gasLimit,
+			'--chain-id', (string) (int) $chain,
+		);
+
+		$signerError = 'gethethsig failed';
+		foreach ($config['keystores'] as $keystore) {
+			$cmd = $cmdBase;
+			array_splice($cmd, 1, 0, array('--keystore', $keystore));
+
+			$descriptors = array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('pipe', 'w'));
+			$process = proc_open($cmd, $descriptors, $pipes);
+			if (!is_resource($process)) {
+				$this->error = 'cannot start gethethsig';
+				return false;
+			}
+			fclose($pipes[0]);
+			$out = stream_get_contents($pipes[1]);
+			$err = stream_get_contents($pipes[2]);
+			fclose($pipes[1]);
+			fclose($pipes[2]);
+			$status = proc_close($process);
+
+			$out = trim((string) $out);
+			if ($status !== 0 || !preg_match('/^0x[0-9a-f]+$/i', $out)) {
+				$signerError = trim((string) $err);
+				if ($signerError === '') $signerError = 'gethethsig returned no raw transaction';
+				continue;
+			}
+
+			$tx = $this->rpc->eth_sendRawTransaction($out);
+			if (is_string($tx) && preg_match('/^0x[0-9a-f]{64}$/i', $tx)) {
+				$this->error = null;
+				return $tx;
+			}
+			$this->error = $this->rpc->error ?: 'eth_sendRawTransaction failed';
+			return false;
+		}
+
+		$this->error = $signerError;
+		return false;
 	}
 
 	/**
@@ -550,6 +713,17 @@ class WalletRPC {
 			}
 			// convert common methods used by yiimp
 			switch ($method) {
+			case 'validateaddress':
+				$address = arraySafeVal($params, 0, '');
+				$valid = preg_match('/^0[xX][0-9a-fA-F]{40}$/', (string) $address) === 1;
+				return array('isvalid' => $valid, 'address' => $address);
+			case 'sendtoaddress':
+				return $this->gethSendToAddress(arraySafeVal($params, 0, ''), arraySafeVal($params, 1, 0));
+			case 'sendmany':
+				// GETH has no batch wallet RPC. Payment code forces the
+				// per-user sendtoaddress path for these coins.
+				$this->error = 'GETH wallet does not support sendmany; use per-user payouts';
+				return false;
 			case 'getaccountaddress':
 				if (!empty($params[0]))
 					return $params[0];
@@ -620,13 +794,20 @@ class WalletRPC {
 					if ($block) {
 						$mapped = $this->ethExplorerBlock($block);
 						$this->error = NULL;
+						$conf = (int) arraySafeVal($mapped, 'confirmations', 0);
+						// Parallax/XHash chains defer the coinbase reward by
+						// mature_blocks (100 on LAX). With no configured value,
+						// keep the old `generate` response so the normal
+						// auto-calibration path can still set mature_blocks.
+						$maturity = (int) ($this->coin ? $this->coin->mature_blocks : 0);
+						$category = ($maturity > 0 && $conf < $maturity) ? 'immature' : 'generate';
 						return array(
 							'txid' => $txid,
 							'blockhash' => $txid,
 							'time' => arraySafeVal($mapped, 'time', 0),
-							'confirmations' => arraySafeVal($mapped, 'confirmations', 0),
+							'confirmations' => $conf,
 							'details' => array(array(
-								'category' => 'generate',
+								'category' => $category,
 								// Yii AR exposes columns via __get, so arraySafeVal() cannot see them.
 								'amount' => (double) ($this->coin ? $this->coin->reward : 0),
 							)),

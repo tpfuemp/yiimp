@@ -25,3 +25,4 @@ web/yaamp/.idea/
 *.0
 .vscode/
 runtime/
+bin/gethethsig

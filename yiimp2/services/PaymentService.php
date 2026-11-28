@@ -62,6 +62,11 @@ class PaymentService
         $remote = new \app\components\rpc\WalletRPC($coin);
         $info   = $remote->getinfo();
         $isNeb  = ($coin->algo ?? '') === 'nebhash' || ($coin->symbol ?? '') === 'NEB';
+        // GETH has no batch wallet RPC: each payout is signed locally and
+        // broadcast as its own raw transaction.
+        $isGeth = ($coin->rpcencoding ?? '') === 'GETH'
+            || ($coin->rpcencoding ?? '') === 'NIRO'
+            || $remote->type === 'Ethereum';
 
         if (!$info) {
             Yii::warning("payment: can't connect to {$coin->symbol} wallet", __CLASS__);
@@ -100,7 +105,7 @@ class PaymentService
 
         // Coins that do not support sendmany or have a payout_max cap
         $sendToAddressCoins = ['BITC','BNODE','BOD','DIME','BTCRY','IOTS','ECC','ADOT','SAPP','CURVE','CBE','PEPEW'];
-        $useSendToAddress   = !empty($coin->payout_max) || in_array($coin->symbol, $sendToAddressCoins, true);
+        $useSendToAddress   = $isGeth || !empty($coin->payout_max) || in_array($coin->symbol, $sendToAddressCoins, true);
 
         if ($useSendToAddress) {
             foreach ($users as $user) {
@@ -119,6 +124,9 @@ class PaymentService
                         Yii::warning("RPC {$error}, {$user->username}, {$amount}", __CLASS__);
                         if ($isNeb) {
                             throw new \RuntimeException("NEB payout failed: " . ($error ?: 'neb-wallet returned no txid'));
+                        }
+                        if ($isGeth) {
+                            throw new \RuntimeException("GETH payout failed: " . ($error ?: 'no txid returned'));
                         }
                         if (stripos($error, 'transaction too large') !== false
                             || stripos($error, 'invalid amount') !== false
@@ -359,32 +367,38 @@ class PaymentService
         }
 
         if (!empty($retryAddresses)) {
-            $tx = $coin->txmessage
-                ? $remote->sendmany($account, $retryAddresses, 1, "{$siteName} retry")
-                : $remote->sendmany($account, $retryAddresses);
-
-            if (empty($tx)) {
-                Yii::warning($remote->error, __CLASS__);
-                foreach ($retryPayouts as $id => $uid) {
-                    $payout = Payouts::findOne($id);
-                    if ($payout) {
-                        $payout->errmsg = $remote->error;
-                        $payout->save();
-                    }
-                }
-                $this->sendAlert("{$coin->symbol} payout problems detected\n{$remote->error}", $mailMsg);
+            if ($isGeth) {
+                // A timed-out raw transaction may already be on chain; batch
+                // retries are impossible and would double-pay users.
+                Yii::warning("GETH: failed payouts for {$coin->symbol} require manual review, skipping sendmany retry", __CLASS__);
             } else {
-                foreach ($retryPayouts as $id => $uid) {
-                    $payout = Payouts::findOne($id);
-                    if ($payout) {
-                        $payout->tx = $tx;
-                        $payout->save();
-                    } else {
-                        Yii::warning("payout retry {$id} for {$uid} not found", __CLASS__);
+                $tx = $coin->txmessage
+                    ? $remote->sendmany($account, $retryAddresses, 1, "{$siteName} retry")
+                    : $remote->sendmany($account, $retryAddresses);
+
+                if (empty($tx)) {
+                    Yii::warning($remote->error, __CLASS__);
+                    foreach ($retryPayouts as $id => $uid) {
+                        $payout = Payouts::findOne($id);
+                        if ($payout) {
+                            $payout->errmsg = $remote->error;
+                            $payout->save();
+                        }
                     }
+                    $this->sendAlert("{$coin->symbol} payout problems detected\n{$remote->error}", $mailMsg);
+                } else {
+                    foreach ($retryPayouts as $id => $uid) {
+                        $payout = Payouts::findOne($id);
+                        if ($payout) {
+                            $payout->tx = $tx;
+                            $payout->save();
+                        } else {
+                            Yii::warning("payout retry {$id} for {$uid} not found", __CLASS__);
+                        }
+                    }
+                    $mailMsg .= "\ntxid {$tx}\n";
+                    $this->sendAlert("{$coin->symbol} payout problems resolved", $mailMsg);
                 }
-                $mailMsg .= "\ntxid {$tx}\n";
-                $this->sendAlert("{$coin->symbol} payout problems resolved", $mailMsg);
             }
         }
     }

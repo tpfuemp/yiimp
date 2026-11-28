@@ -62,6 +62,13 @@ class Ethereum extends JSON_RPC
 		return $peers;
 	}
 
+	function eth_chainId($decode_hex=true)
+	{
+		$chain = $this->ether_request(__FUNCTION__);
+		if($decode_hex) $chain = $this->decode_hex($chain);
+		return $chain;
+	}
+
 	function eth_protocolVersion()
 	{
 		return $this->ether_request(__FUNCTION__);
@@ -168,6 +175,13 @@ class Ethereum extends JSON_RPC
 		{
 			return $this->ether_request(__FUNCTION__, $transaction->toArray());
 		}
+	}
+
+	// Broadcast a transaction signed by gethethsig. A mining node has no
+	// unlocked account, so this is the only viable GETH payout transport.
+	function eth_sendRawTransaction($rawtx)
+	{
+		return $this->ether_request(__FUNCTION__, array($rawtx));
 	}
 
 	function eth_call($message, $block)

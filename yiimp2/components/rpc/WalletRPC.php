@@ -85,6 +85,7 @@ class WalletRPC
             $this->isNebhash = ($coin->algo ?? '') === 'nebhash' || ($coin->symbol ?? '') === 'NEB';
             switch ($coin->rpcencoding) {
                 case 'GETH':
+                case 'NIRO':
                     $this->type    = 'Ethereum';
                     $this->coin    = $coin;
                     $this->account = empty($coin->account) ? $coin->master_wallet : $coin->account;
@@ -140,6 +141,179 @@ class WalletRPC
             // Backward-compat: direct user/password/host/port
             $this->rpc = new cBitcoinRPC($userOrCoin, $pw, $host, $port, $url);
         }
+    }
+
+    /**
+     * GETH mining nodes expose no unlocked wallet account. Payouts are signed
+     * locally from an Ethereum V3 keystore with gethethsig and broadcast via
+     * eth_sendRawTransaction. A missing signer stops the payout before any
+     * user balance is debited.
+     */
+    private function gethSignerConfig(): ?array
+    {
+        $bin = defined('YIIMP_GETH_SIGNER_BIN') ? (string) constant('YIIMP_GETH_SIGNER_BIN')
+            : (realpath(dirname(__DIR__, 2) . '/bin/gethethsig') ?: dirname(__DIR__, 2) . '/bin/gethethsig');
+        if (!defined('YIIMP_GETH_PASSWORD_FILE')) {
+            $this->error = 'YIIMP_GETH_PASSWORD_FILE is not configured';
+            return null;
+        }
+        $password = (string) constant('YIIMP_GETH_PASSWORD_FILE');
+
+        $keystores = [];
+        if (defined('YIIMP_GETH_KEYSTORE_FILE')) {
+            $keystores[] = (string) constant('YIIMP_GETH_KEYSTORE_FILE');
+        } else {
+            if (defined('YIIMP_GETH_KEYSTORE_DIR')) {
+                $found = glob(rtrim((string) constant('YIIMP_GETH_KEYSTORE_DIR'), '/') . '/UTC*');
+                if (is_array($found)) {
+                    $keystores = $found;
+                }
+            }
+        }
+
+        if (!is_executable($bin)) {
+            $this->error = "GETH signer is not executable: {$bin}";
+            return null;
+        }
+        if (!is_readable($password)) {
+            $this->error = "GETH keystore password is not readable: {$password}";
+            return null;
+        }
+
+        $usable = [];
+        foreach ($keystores as $file) {
+            if (is_readable($file)) {
+                $usable[] = $file;
+            }
+        }
+        if (empty($usable)) {
+            $this->error = 'No readable GETH keystore file';
+            return null;
+        }
+
+        return ['bin' => $bin, 'password' => $password, 'keystores' => $usable];
+    }
+
+    /** Convert an 8-decimal coin balance to an exact wei decimal string. */
+    private function gethAmountToWei(mixed $amount): string
+    {
+        $amount = (float) $amount;
+        if ($amount <= 0) {
+            return '0';
+        }
+        $string = sprintf('%.8f', $amount);
+        $parts = explode('.', $string, 2);
+        $fraction = isset($parts[1]) ? substr($parts[1], 0, 8) : '';
+        $wei = ltrim($parts[0] . str_pad($fraction, 8, '0') . str_repeat('0', 10), '0');
+        return $wei === '' ? '0' : $wei;
+    }
+
+    /** Sign one legacy EIP-155 transfer and broadcast it. */
+    private function gethSendToAddress(mixed $address, mixed $amount): mixed
+    {
+        $this->error = null;
+        // accounts may use the 0X prefix, the signer and node want 0x
+        $address = (string) preg_replace('/^0X/', '0x', (string) $address);
+        if (!preg_match('/^0x[0-9a-fA-F]{40}$/', $address)) {
+            $this->error = "invalid GETH address: {$address}";
+            return false;
+        }
+
+        $from = (string) preg_replace('/^0X/', '0x', (string) ($this->account ?? ''));
+        if (!preg_match('/^0x[0-9a-fA-F]{40}$/', $from)) {
+            $this->error = 'GETH master_wallet is not a valid address';
+            return false;
+        }
+
+        $config = $this->gethSignerConfig();
+        if ($config === null) {
+            return false;
+        }
+
+        /** @var EthereumRPC $eth */
+        $eth = $this->rpc;
+        $chain = $eth->eth_chainId();
+        if (!is_numeric($chain) || (int) $chain <= 0) {
+            $this->error = $eth->getError() ?: 'eth_chainId failed';
+            return false;
+        }
+        $gasPrice = $eth->eth_gasPrice();
+        if (defined('YIIMP_GETH_GAS_PRICE')) {
+            $gasPrice = (int) constant('YIIMP_GETH_GAS_PRICE');
+        }
+        if (!is_numeric($gasPrice) || (int) $gasPrice <= 0) {
+            $this->error = $eth->getError() ?: 'eth_gasPrice failed';
+            return false;
+        }
+        $gasLimit = defined('YIIMP_GETH_GAS_LIMIT') ? (int) constant('YIIMP_GETH_GAS_LIMIT') : 21000;
+        if ($gasLimit < 21000) {
+            $gasLimit = 21000;
+        }
+
+        $valueWei = $this->gethAmountToWei($amount);
+        $gasWei = (float) $gasPrice * $gasLimit;
+        if ($valueWei === '0' || (float) $valueWei <= $gasWei) {
+            $this->error = 'GETH payout is below the estimated gas cost';
+            return false;
+        }
+
+        // pending: several payouts per cycle, each needs the next nonce
+        $nonce = $eth->eth_getTransactionCount($from, 'pending');
+        if (!is_numeric($nonce)) {
+            $this->error = $eth->getError() ?: 'eth_getTransactionCount failed';
+            return false;
+        }
+
+        $cmdBase = [
+            $config['bin'],
+            '--password-file', $config['password'],
+            '--expected-address', $from,
+            '--to', $address,
+            '--value-wei', $valueWei,
+            '--nonce', (string) (int) $nonce,
+            '--gas-price', (string) (int) $gasPrice,
+            '--gas-limit', (string) $gasLimit,
+            '--chain-id', (string) (int) $chain,
+        ];
+
+        $signerError = 'gethethsig failed';
+        foreach ($config['keystores'] as $keystore) {
+            $cmd = $cmdBase;
+            array_splice($cmd, 1, 0, ['--keystore', $keystore]);
+
+            $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+            $process = proc_open($cmd, $descriptors, $pipes);
+            if (!is_resource($process)) {
+                $this->error = 'cannot start gethethsig';
+                return false;
+            }
+            fclose($pipes[0]);
+            $out = stream_get_contents($pipes[1]);
+            $err = stream_get_contents($pipes[2]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            $status = proc_close($process);
+
+            $out = trim((string) $out);
+            if ($status !== 0 || !preg_match('/^0x[0-9a-f]+$/i', $out)) {
+                $signerError = trim((string) $err);
+                if ($signerError === '') {
+                    $signerError = 'gethethsig returned no raw transaction';
+                }
+                continue;
+            }
+
+            $tx = $eth->eth_sendRawTransaction($out);
+            if (is_string($tx) && preg_match('/^0x[0-9a-f]{64}$/i', $tx)) {
+                $this->error = null;
+                return $tx;
+            }
+            $this->error = $eth->getError() ?: 'eth_sendRawTransaction failed';
+            return false;
+        }
+
+        $this->error = $signerError;
+        return false;
     }
 
     /**
@@ -788,6 +962,22 @@ class WalletRPC
             }
 
             switch ($method) {
+                case 'validateaddress':
+                    $address = (string) ($params[0] ?? '');
+                    return [
+                        'isvalid' => preg_match('/^0[xX][0-9a-fA-F]{40}$/', $address) === 1,
+                        'address' => $address,
+                    ];
+
+                case 'sendtoaddress':
+                    return $this->gethSendToAddress($params[0] ?? '', $params[1] ?? 0);
+
+                case 'sendmany':
+                    // GETH has no batch wallet RPC; PaymentService forces the
+                    // per-user sendtoaddress path for these coins.
+                    $this->error = 'GETH wallet does not support sendmany; use per-user payouts';
+                    return false;
+
                 case 'getaccountaddress':
                     return !empty($params[0]) ? $params[0] : $this->account;
 
@@ -879,13 +1069,21 @@ class WalletRPC
                         if ($block) {
                             $mapped = $this->ethExplorerBlock($block);
                             $this->error = null;
+                            $conf = (int) ($mapped['confirmations'] ?? 0);
+                            // Keep the reward immature until the chain's
+                            // coinbase maturity is reached, otherwise earnings
+                            // are credited before the node can spend them.
+                            // No configured value means let the normal
+                            // auto-calibration path decide mature_blocks.
+                            $maturity = (int) ($this->coin->mature_blocks ?? 0);
+                            $category = ($maturity > 0 && $conf < $maturity) ? 'immature' : 'generate';
                             return [
                                 'txid'          => $txid,
                                 'blockhash'     => $txid,
                                 'time'          => (int) ($mapped['time'] ?? 0),
-                                'confirmations' => (int) ($mapped['confirmations'] ?? 0),
+                                'confirmations' => $conf,
                                 'details'       => [[
-                                    'category' => 'generate',
+                                    'category' => $category,
                                     'amount'   => (float) ($this->coin->reward ?? 0),
                                 ]],
                             ];
@@ -1315,19 +1513,38 @@ class WalletRPC
         // The pool's own block records are the authoritative source for mined
         // rewards. Geth reports the physical miner address in block headers,
         // which may differ from the configured pool wallet, so the chain scan
-        // above alone can miss every block this coin actually found.
-        $rows = array_merge($rows, $this->ethPoolMinedBlocks());
+        // above alone can miss every block this coin actually found. Put the
+        // DB rows first so they win the dedupe below (they also carry a usable
+        // blockhash-as-txid for the admin explorer link).
+        $rows = array_merge($this->ethPoolMinedBlocks(), $rows);
 
         // Deduplicate (chain + DB can describe the same block), newest first.
+        // Generated rewards have no real transaction, so their txid is either
+        // absent (chain scan) or the block hash (DB) — they must share a key.
         $seen = [];
         $rows = array_values(array_filter($rows, static function (array $row) use (&$seen): bool {
-            $key = (string) ($row['blockhash'] ?? '') . '|' . (string) ($row['txid'] ?? '');
-            if ($key === '|' || isset($seen[$key])) {
+            $blockhash = (string) ($row['blockhash'] ?? '');
+            if (($row['category'] ?? '') === 'generate') {
+                $key = 'generate|' . $blockhash;
+            } else {
+                $key = 'tx|' . $blockhash . '|' . (string) ($row['txid'] ?? '');
+            }
+            if ($blockhash === '' || isset($seen[$key])) {
                 return false;
             }
             $seen[$key] = true;
             return true;
         }));
+        // The blocks table stores confirmations as-of insertion time; refresh
+        // them against the current head so the admin wallet table is live.
+        foreach ($rows as &$row) {
+            if (($row['category'] ?? '') !== 'generate' || empty($row['height'])) {
+                continue;
+            }
+            $row['confirmations'] = max(0, $head - (int) $row['height'] + 1);
+        }
+        unset($row);
+
         usort($rows, static fn (array $a, array $b): int =>
             ((int) ($b['time'] ?? 0)) <=> ((int) ($a['time'] ?? 0))
         );
@@ -1363,10 +1580,13 @@ class WalletRPC
             $rows[] = [
                 'txid'          => (string) (($b['txhash'] ?? '') ?: $blockHash),
                 'blockhash'     => $blockHash,
+                'height'        => (int) ($b['height'] ?? 0),
                 'time'          => (int) ($b['time'] ?? 0),
                 'category'      => 'generate',
                 'amount'        => (float) ($b['amount'] ?? 0),
                 'address'       => $wallet,
+                // Stored value is a snapshot from when the block was found.
+                // ethListTransactions() refreshes it from the live chain head.
                 'confirmations' => (int) ($b['confirmations'] ?? 0),
             ];
         }

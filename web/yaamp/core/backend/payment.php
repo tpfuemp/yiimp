@@ -46,6 +46,9 @@ function BackendCoinPayments($coin)
 	// NEB has no Bitcoin wallet RPC; WalletRPC reads the balance through the
 	// local neb-wallet CLI. Never debit users when that balance is unknown.
 	$is_neb = ($coin->algo == 'nebhash' || $coin->symbol == 'NEB');
+	// GETH has no batch wallet RPC: every payout is signed locally and sent as
+	// its own raw transaction, so always use the per-user sendtoaddress path.
+	$is_geth = ($coin->rpcencoding == 'GETH' || $coin->rpcencoding == 'NIRO' || $remote->type == 'Ethereum');
 	if ($is_neb && arraySafeVal($info, 'balance', null) === null) {
 		debuglog("payment: cannot read {$coin->symbol} wallet balance ".arraySafeVal($info, 'wallet_error', ''));
 		return;
@@ -62,7 +65,7 @@ function BackendCoinPayments($coin)
 	$users = getdbolist('db_accounts', "balance>$min_payout AND (payout_threshold IS NULL OR balance>payout_threshold) AND coinid={$coin->id} and !is_locked ORDER BY balance DESC");
 
 	// todo: enhance/detect payout_max from normal sendmany error
-	if($coin->symbol == 'BITC' || $coin->symbol == 'BNODE' || $coin->symbol == 'BOD' || $coin->symbol == 'DIME' || $coin->symbol == 'BTCRY' || $coin->symbol == 'IOTS' || $coin->symbol == 'ECC' || $coin->symbol == 'ADOT' || $coin->symbol == 'SAPP' || $coin->symbol == 'CURVE' || $coin->symbol == 'CBE' || $coin->symbol == 'PEPEW' || !empty($coin->payout_max))
+	if($is_geth || $coin->symbol == 'BITC' || $coin->symbol == 'BNODE' || $coin->symbol == 'BOD' || $coin->symbol == 'DIME' || $coin->symbol == 'BTCRY' || $coin->symbol == 'IOTS' || $coin->symbol == 'ECC' || $coin->symbol == 'ADOT' || $coin->symbol == 'SAPP' || $coin->symbol == 'CURVE' || $coin->symbol == 'CBE' || $coin->symbol == 'PEPEW' || !empty($coin->payout_max))
 	{
 		foreach($users as $user)
 		{
@@ -78,6 +81,9 @@ function BackendCoinPayments($coin)
 				{
 					$error = $remote->error;
 					debuglog("RPC $error, {$user->username}, $amount");
+					// No debit happens until a txid exists. Never halve a GETH
+					// amount to work around gas/signer errors.
+					if ($is_geth) break;
 					if (stripos($error,'transaction too large') !== false || stripos($error,'invalid amount') !== false
 						|| stripos($error,'insufficient funds') !== false || stripos($error,'transaction creation failed') !== false
 					) {
@@ -316,38 +322,44 @@ function BackendCoinPayments($coin)
 	// redo failed payouts
 	if (!empty($addresses))
 	{
-		if (!$coin->txmessage)
-			$tx = $remote->sendmany($account, $addresses);
-		else
-			$tx = $remote->sendmany($account, $addresses, 1, YAAMP_SITE_NAME." retry");
-
-		if(empty($tx)) {
-			debuglog($remote->error);
-
-			foreach ($payouts as $id => $uid) {
-				$payout = getdbo('db_payouts', $id);
-				if ($payout && $payout->id == $id) {
-					$payout->errmsg = $remote->error;
-					$payout->save();
-				}
-			}
-
-			send_email_alert('payouts', "{$coin->symbol} payout problems detected\n {$remote->error}", $mailmsg);
-
+		if ($is_geth) {
+			// Raw transactions cannot be retried as a batch; a broadcast that
+			// timed out may already be on chain. Require manual verification.
+			debuglog("GETH: failed payouts for {$coin->symbol} require manual review, skipping sendmany retry");
 		} else {
+			if (!$coin->txmessage)
+				$tx = $remote->sendmany($account, $addresses);
+			else
+				$tx = $remote->sendmany($account, $addresses, 1, YAAMP_SITE_NAME." retry");
 
-			foreach ($payouts as $id => $uid) {
-				$payout = getdbo('db_payouts', $id);
-				if ($payout && $payout->id == $id) {
-					$payout->tx = $tx;
-					$payout->save();
-				} else {
-					debuglog("payout retry $id for $uid not found!");
+			if(empty($tx)) {
+				debuglog($remote->error);
+
+				foreach ($payouts as $id => $uid) {
+					$payout = getdbo('db_payouts', $id);
+					if ($payout && $payout->id == $id) {
+						$payout->errmsg = $remote->error;
+						$payout->save();
+					}
 				}
-			}
 
-			$mailmsg .= "\ntxid $tx\n";
-			send_email_alert('payouts', "{$coin->symbol} payout problems resolved", $mailmsg);
+				send_email_alert('payouts', "{$coin->symbol} payout problems detected\n {$remote->error}", $mailmsg);
+
+			} else {
+
+				foreach ($payouts as $id => $uid) {
+					$payout = getdbo('db_payouts', $id);
+					if ($payout && $payout->id == $id) {
+						$payout->tx = $tx;
+						$payout->save();
+					} else {
+						debuglog("payout retry $id for $uid not found!");
+					}
+				}
+
+				$mailmsg .= "\ntxid $tx\n";
+				send_email_alert('payouts', "{$coin->symbol} payout problems resolved", $mailmsg);
+			}
 		}
 	}
 
