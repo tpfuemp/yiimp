@@ -121,6 +121,8 @@ void coind_terminate(YAAMP_COIND *coind);
 bool coind_create_job(YAAMP_COIND *coind, bool force=false);
 
 bool coind_validate_user_address(YAAMP_COIND *coind, char* const address);
+bool geth_valid_address(const char *address);
+bool coind_is_geth(const YAAMP_COIND *coind);
 
 
 

@@ -1,3 +1,4 @@
+#include <ctype.h>
 
 #include "stratum.h"
 
@@ -99,9 +100,38 @@ bool coind_can_mine(YAAMP_COIND *coind, bool isaux)
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// EVM address: 0x (or 0X) and 40 hex digits
+bool geth_valid_address(const char *address)
+{
+	if (!address || strlen(address) != 42) return false;
+	if (address[0] != '0' || (address[1] != 'x' && address[1] != 'X')) return false;
+	for (int i = 2; i < 42; i++)
+		if (!isxdigit((unsigned char) address[i])) return false;
+	return true;
+}
+
+// GETH-family nodes: JSON-RPC 2.0, no validateaddress
+bool coind_is_geth(const YAAMP_COIND *coind)
+{
+	return is_eth || (coind && (!strcasecmp(coind->rpcencoding, "GETH") || !strcasecmp(coind->rpcencoding, "NIRO")));
+}
+
+bool rpc_jsonrpc2(const YAAMP_RPC *rpc)
+{
+	return coind_is_geth(rpc ? rpc->coind : NULL);
+}
+
 bool coind_validate_user_address(YAAMP_COIND *coind, char* const address)
 {
 	if(!address[0]) return false;
+
+	if (coind_is_geth(coind))
+	{
+		bool valid = geth_valid_address(address);
+		if (!valid)
+			stratumlog("%s: %s user address %s is not valid.\n", g_stratum_algo, coind->symbol, address);
+		return valid;
+	}
 
 	// NEB nodes have no usable validateaddress RPC; verify bech32m locally.
 	if (is_nebhash)

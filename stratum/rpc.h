@@ -1,6 +1,21 @@
 
 class YAAMP_COIND;
 
+// JSON-RPC request. GETH-family nodes (ethash, xhash) reject requests without
+// "jsonrpc":"2.0"; other coins keep the 1.0 form their daemons expect.
+inline void rpc_build_request(char *out, size_t outsz, const char *method,
+	const char *params, int id, bool jsonrpc2)
+{
+	const char *v = jsonrpc2 ? "\"jsonrpc\":\"2.0\"," : "";
+	if (params)
+		snprintf(out, outsz, "{%s\"method\":\"%s\",\"params\":%s,\"id\":\"%d\"}", v, method, params, id);
+	else
+		snprintf(out, outsz, "{%s\"method\":\"%s\",\"id\":\"%d\"}", v, method, id);
+}
+
+struct YAAMP_RPC;
+bool rpc_jsonrpc2(const YAAMP_RPC *rpc);
+
 struct YAAMP_RPC
 {
 	YAAMP_COIND *coind;
