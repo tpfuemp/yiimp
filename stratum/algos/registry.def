@@ -162,6 +162,7 @@ ALGO("yespowerR16", yespowerR16_hash, 0x10000, 0, STD, 0)
 ALGO("yespowerRES", yespowerRES_hash, 0x10000, 0, STD, 0) //Resistanse[RES]
 ALGO("yespowerSUGAR", yespowerSUGAR_hash, 0x10000, 0, STD, 0) //Sugarchain[SUGAR]
 ALGO("yespowerTIDE", yespowerTIDE_hash, 0x10000, 0, STD, 0) //Tidecoin[TDC]
+ALGO("yespowerSMT", yespowerSMT_hash, 0x10000, 0, STD, 0) //Smartiecoin[SMT]
 ALGO("yespowerURX", yespowerURX_hash, 0x10000, 0, STD, 0) //UraniumX[URX]
 ALGO("yespowerMGPC", yespowerMGPC_hash, 0x10000, 0, STD, 0) //Magpiecoin[MGPC]
 ALGO("yespowerARWN", yespowerARWN_hash, 0x10000, 0, STD, 0) //Arowanacoin[ARWN]

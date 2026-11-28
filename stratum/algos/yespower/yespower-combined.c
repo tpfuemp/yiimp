@@ -1034,7 +1034,7 @@ int yespower(yespower_local_t *local,
 
 	/* Sanity-check parameters */
 	if ((version != YESPOWER_0_5 && version != YESPOWER_1_0) ||
-	    N < 1024 || N > 512 * 1024 || r < 8 || r > 32 ||
+	    N < 256 || N > 512 * 1024 || r < 8 || r > 32 ||
 	    (N & (N - 1)) != 0 || r < rmin ||
 	    (!pers && perslen)) {
 		errno = EINVAL;
@@ -1261,6 +1261,19 @@ void yespowerTIDE_hash(const char* input, char* output, uint32_t len)
         .perslen = 0 
     };
     yespower_tls( input, len, &yespower_1_0_tide, (yespower_binary_t *)output);
+}
+
+// Smartiecoin, from nTime 1790528400: N=256 is below upstream's 1024 floor
+void yespowerSMT_hash(const char* input, char* output, uint32_t len)
+{
+    yespower_params_t yespower_1_0_smt = {
+        .version = YESPOWER_1_0,
+        .N = 256,
+        .r = 8,
+        .pers = NULL,
+        .perslen = 0
+    };
+    yespower_tls(input, len, &yespower_1_0_smt, (yespower_binary_t *)output);
 }
 
 void cpupower_hash(const char* input, char* output, uint32_t len)
